@@ -1,0 +1,13 @@
+[package]
+name = "planter"
+version = "0.1.0"
+authors = ["Sebastiano Giordano"]
+description = "PlanTer is a project management application."
+documentation = "https://docs.rs/planter"
+keywords = ["project_management"]
+license = "Agpl-3.0"
+readme = "README.md"
+repository = "https://github.com/krahos/planter"
+edition = "2024"
+
+[dependencies]
