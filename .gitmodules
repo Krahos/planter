@@ -1,6 +1,6 @@
-[submodule "iced_aw"]
-	path = iced_aw
-	url = git@github.com:Krahos/iced_aw.git
 [submodule "planter-core"]
 	path = planter-core
 	url = git@github.com:Krahos/planter-core.git
+[submodule "iced_aw"]
+	path = iced_aw
+	url = git@github.com:Krahos/iced_aw.git
