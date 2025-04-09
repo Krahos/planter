@@ -11,3 +11,7 @@ repository = "https://github.com/krahos/planter"
 edition = "2024"
 
 [dependencies]
+chrono = "0.4.40"
+iced = {version = "0.13.1", default-features = false, features = [ "tiny-skia" ]}
+iced_aw = {path = "./iced_aw"}
+planter-core = {path = "../planter-core"}

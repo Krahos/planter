@@ -17,15 +17,22 @@
       in
       with pkgs;
       {
-        devShells.default = mkShell {
-          buildInputs = [
+        devShells.default = mkShell rec {
+          nativeBuildInputs = [
             bacon
             cargo-udeps
             cargo-edit
             rust-analyzer
             cargo-deny
             rust-bin.stable.latest.default
+
+            pkg-config
+            wayland
+            libxkbcommon
+            xorg.libX11
+            xorg.libXrandr
           ];
+          LD_LIBRARY_PATH = "${lib.makeLibraryPath nativeBuildInputs}";
         };
       }
     );
