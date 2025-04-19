@@ -14,4 +14,7 @@ edition = "2024"
 chrono = "0.4.40"
 iced = {version = "0.13.1", default-features = false, features = [ "tiny-skia" ]}
 iced_aw = {path = "./iced_aw"}
-planter-core = {path = "../planter-core"}
+once_cell = "1.21.3"
+planter-core = {path = "./planter-core"}
+proptest = "1.6.0"
+regex = "1.11.1"

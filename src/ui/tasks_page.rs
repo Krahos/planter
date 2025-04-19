@@ -1,12 +1,12 @@
-use std::fmt::Debug;
-
 use chrono::NaiveDateTime;
 use iced::widget::checkbox;
 use iced::{Element, Length};
 use iced_aw::{Grid, GridRow};
+use once_cell::sync::Lazy;
 use planter_core::duration::PositiveDuration;
 use planter_core::project::Project;
 use planter_core::task::Task;
+use regex::bytes::Regex;
 
 use super::components::data_cell::data_cell;
 use super::components::data_label::data_label;
@@ -28,6 +28,10 @@ struct Repr {
     is_finish_err: bool,
     duration: String,
     is_duration_err: bool,
+    predecessors: String,
+    is_predecessors_err: bool,
+    successors: String,
+    is_successors_err: bool,
     resources: String,
 }
 
@@ -39,6 +43,8 @@ pub enum Message {
     UpdateStart(usize, String),
     UpdateFinish(usize, String),
     UpdateDuration(usize, String),
+    UpdatePredecessors(usize, String),
+    UpdateSuccessors(usize, String),
     UpdateResources(usize, String),
 }
 
@@ -56,20 +62,41 @@ pub fn update(state: &mut State, message: Message) {
     match message {
         Message::UpdateName(i, n) => {
             state.repr[i].name = n.clone();
-            state.project.tasks_mut()[i].edit_name(n);
+            state
+                .project
+                .task_mut(i.try_into().unwrap())
+                .unwrap()
+                .edit_name(n);
         }
         Message::UpdateDescription(i, d) => {
             state.repr[i].description = d.clone();
-            state.project.tasks_mut()[i].edit_description(d);
+            state
+                .project
+                .task_mut(i.try_into().unwrap())
+                .unwrap()
+                .edit_description(d);
         }
         Message::ToggleCompleted(i) => {
             state.repr[i].completed = !state.repr[i].completed;
-            state.project.tasks_mut()[i].toggle_completed();
+            state
+                .project
+                .task_mut(i.try_into().unwrap())
+                .unwrap()
+                .toggle_completed();
         }
         Message::UpdateStart(i, s) => {
             if let Ok(date) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M") {
-                state.project.tasks_mut()[i].edit_start(date.and_utc());
-                if let Some(duration) = state.project.tasks()[i].duration() {
+                state
+                    .project
+                    .task_mut(i.try_into().unwrap())
+                    .unwrap()
+                    .edit_start(date.and_utc());
+                if let Some(duration) = state
+                    .project
+                    .task_mut(i.try_into().unwrap())
+                    .unwrap()
+                    .duration()
+                {
                     state.repr[i].duration = duration.to_string();
                     state.repr[i].duration = format!("{} hour(s)", duration.num_hours());
                 }
@@ -81,8 +108,17 @@ pub fn update(state: &mut State, message: Message) {
         }
         Message::UpdateFinish(i, s) => {
             if let Ok(date) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M") {
-                state.project.tasks_mut()[i].edit_finish(date.and_utc());
-                if let Some(duration) = state.project.tasks()[i].duration() {
+                state
+                    .project
+                    .task_mut(i.try_into().unwrap())
+                    .unwrap()
+                    .edit_finish(date.and_utc());
+                if let Some(duration) = state
+                    .project
+                    .task_mut(i.try_into().unwrap())
+                    .unwrap()
+                    .duration()
+                {
                     state.repr[i].duration = format!("{} hour(s)", duration.num_hours());
                 }
 
@@ -94,7 +130,11 @@ pub fn update(state: &mut State, message: Message) {
         }
         Message::UpdateDuration(i, d) => {
             if let Ok(duration) = PositiveDuration::parse_from_str(&d) {
-                state.project.tasks_mut()[i].edit_duration(duration);
+                state
+                    .project
+                    .task_mut(i.try_into().unwrap())
+                    .unwrap()
+                    .edit_duration(duration);
                 state.repr[i].is_duration_err = false;
             } else {
                 state.repr[i].is_duration_err = true;
@@ -102,6 +142,51 @@ pub fn update(state: &mut State, message: Message) {
             state.repr[i].duration = d;
         }
         Message::UpdateResources(_, _) => {}
+        Message::UpdatePredecessors(i, p) => {
+            if let Some(indices) = parse_indices(&p) {
+                if state.project.update_predecessors(i, &indices).is_err() {
+                    state.repr[i].is_predecessors_err = true;
+                } else {
+                    state.repr[i].is_predecessors_err = false;
+                }
+            } else {
+                state.repr[i].is_predecessors_err = true;
+            }
+            state.repr[i].predecessors = p
+        }
+        Message::UpdateSuccessors(i, p) => {
+            if let Some(indices) = parse_indices(&p) {
+                if state.project.update_successors(i, &indices).is_err() {
+                    state.repr[i].is_successors_err = true;
+                } else {
+                    state.repr[i].is_successors_err = false;
+                }
+            } else {
+                state.repr[i].is_successors_err = true;
+            }
+            state.repr[i].successors = p
+        }
+    }
+}
+
+fn parse_indices(s: &str) -> Option<Vec<usize>> {
+    let bytes = s.as_bytes();
+    static RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"^[0-9]{1,3}(;[0-9]{1,3})*$")
+            .expect("It wasn't possible to compile a hardcoded regex. This is a bug.")
+    });
+    if RE.is_match(bytes) {
+        Some(
+            s.split(';')
+                .map(|index_s| {
+                    index_s.parse::<usize>().expect(&format!(
+                        "It should have been possible to parse {index_s} as usize. This is a bug."
+                    ))
+                })
+                .collect(),
+        )
+    } else {
+        None
     }
 }
 
@@ -113,6 +198,8 @@ pub fn view(state: &State) -> Element<'_, Message> {
         .push(data_label("Start"))
         .push(data_label("Finish"))
         .push(data_label("Duration"))
+        .push(data_label("Predecessors"))
+        .push(data_label("Successors"))
         .push(data_label("Resources"));
 
     let content_rows: Vec<GridRow<'_, _>> = state
@@ -148,6 +235,16 @@ pub fn view(state: &State) -> Element<'_, Message> {
                     data_cell("48 h", &r.duration, r.is_duration_err)
                         .on_input(move |d| Message::UpdateDuration(i, d)),
                 )
+                // Predecessors
+                .push(
+                    data_cell("1;2", &r.predecessors, r.is_predecessors_err)
+                        .on_input(move |p| Message::UpdatePredecessors(i, p)),
+                )
+                // Successors
+                .push(
+                    data_cell("1;2", &r.successors, r.is_successors_err)
+                        .on_input(move |p| Message::UpdateSuccessors(i, p)),
+                )
                 // Resources
                 .push(
                     data_cell("", &r.resources, false)
@@ -162,4 +259,24 @@ pub fn view(state: &State) -> Element<'_, Message> {
         .width(Length::Fill)
         .height(Length::Shrink)
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::{prelude::Strategy, proptest};
+
+    use crate::ui::tasks_page::parse_indices;
+
+    fn string_array_strategy() -> impl Strategy<Value = String> {
+        r"[0-9]{1,3}(;[0-9]{1,3})*".prop_map(|s| s)
+    }
+
+    proptest! {
+        #[test]
+        fn parse_indices_works(s in string_array_strategy()) {
+            let arr = parse_indices(&s);
+
+            assert!(arr.is_some());
+        }
+    }
 }
