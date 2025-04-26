@@ -143,29 +143,96 @@ pub fn update(state: &mut State, message: Message) {
         }
         Message::UpdateResources(_, _) => {}
         Message::UpdatePredecessors(i, p) => {
-            if let Some(indices) = parse_indices(&p) {
+            let predecessors = state
+                .project
+                .predecessors_indices(i)
+                .collect::<Vec<usize>>();
+            let is_failure = if let Some(indices) = parse_indices(&p) {
                 if state.project.update_predecessors(i, &indices).is_err() {
-                    state.repr[i].is_predecessors_err = true;
+                    true
                 } else {
-                    state.repr[i].is_predecessors_err = false;
+                    false
                 }
             } else {
-                state.repr[i].is_predecessors_err = true;
+                true
+            };
+
+            if is_failure {
+                state
+                    .project
+                    .update_predecessors(i, &[])
+                    .expect("It should have been possible to remove predecessors. This is a bug.");
             }
-            state.repr[i].predecessors = p
+
+            update_predecessors_repr(
+                state,
+                &state
+                    .project
+                    .predecessors_indices(i)
+                    .filter(|index| !predecessors.contains(index))
+                    .collect::<Vec<usize>>(),
+            );
+            update_predecessors_repr(state, &predecessors);
+
+            state.repr[i].is_predecessors_err = is_failure;
+            state.repr[i].predecessors = p;
         }
         Message::UpdateSuccessors(i, p) => {
-            if let Some(indices) = parse_indices(&p) {
+            let successors = state.project.successors_indices(i).collect::<Vec<usize>>();
+            let is_failure = if let Some(indices) = parse_indices(&p) {
                 if state.project.update_successors(i, &indices).is_err() {
-                    state.repr[i].is_successors_err = true;
+                    true
                 } else {
-                    state.repr[i].is_successors_err = false;
+                    false
                 }
             } else {
-                state.repr[i].is_successors_err = true;
+                true
+            };
+            if is_failure {
+                state
+                    .project
+                    .update_successors(i, &[])
+                    .expect("It should have been possible to remove predecessors. This is a bug.");
             }
-            state.repr[i].successors = p
+
+            // Update old and new successors.
+            update_successors_repr(
+                state,
+                &state
+                    .project
+                    .successors_indices(i)
+                    .filter(|index| !successors.contains(index))
+                    .collect::<Vec<usize>>(),
+            );
+            update_successors_repr(state, &successors);
+
+            state.repr[i].is_successors_err = is_failure;
+            state.repr[i].successors = p;
         }
+    }
+}
+
+fn update_predecessors_repr(state: &mut State, predecessors: &[usize]) {
+    for &predecessor in predecessors {
+        state.repr[predecessor].successors = state
+            .project
+            .successors_indices(predecessor)
+            .into_iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<String>>()
+            .join(";");
+    }
+}
+
+fn update_successors_repr(state: &mut State, successors: &[usize]) {
+    for &successor in successors {
+        state.repr[successor].predecessors = state
+            .project
+            .predecessors_indices(successor)
+            .into_iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<String>>()
+            .join(";");
     }
 }
 
