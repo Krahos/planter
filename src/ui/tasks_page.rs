@@ -15,6 +15,7 @@ use super::components::data_label::data_label;
 pub struct State {
     project: Project,
     repr: Vec<Repr>,
+    new_task: String,
 }
 
 #[derive(Debug, Default)]
@@ -46,14 +47,16 @@ pub enum Message {
     UpdatePredecessors(usize, String),
     UpdateSuccessors(usize, String),
     UpdateResources(usize, String),
+    UpdateNewTask(String),
+    CreateNewTask,
 }
 
 impl Default for State {
     fn default() -> Self {
         State {
-            project: Project::new(String::new())
-                .with_tasks((0..10).into_iter().map(|_| Task::new(String::new()))),
-            repr: (0..10).into_iter().map(|_| Repr::default()).collect(),
+            project: Project::new(String::new()),
+            repr: Vec::new(),
+            new_task: "".to_owned(),
         }
     }
 }
@@ -209,6 +212,16 @@ pub fn update(state: &mut State, message: Message) {
             state.repr[i].is_successors_err = is_failure;
             state.repr[i].successors = p;
         }
+        Message::CreateNewTask => {
+            let task = Task::new(state.new_task.clone());
+            state.project.add_task(task);
+            state.repr.push(Repr {
+                name: state.new_task.clone(),
+                ..Default::default()
+            });
+            state.new_task = "".to_owned();
+        }
+        Message::UpdateNewTask(n) => state.new_task = n,
     }
 }
 
@@ -323,9 +336,36 @@ pub fn view(state: &State) -> Element<'_, Message> {
         })
         .collect();
 
+    let new_row = GridRow::new()
+        // Index
+        .push(data_label(""))
+        // Name
+        .push(
+            data_cell("New task name", &state.new_task, false)
+                .on_input(move |n| Message::UpdateNewTask(n))
+                .on_submit(Message::CreateNewTask),
+        )
+        // Description
+        .push(data_cell("This task...", "", false))
+        // Completed
+        .push(checkbox("", false))
+        // Start
+        .push(data_cell("", "", false))
+        // Finish
+        .push(data_cell("", "", false))
+        // Duration
+        .push(data_cell("", "", false))
+        // Predecessors
+        .push(data_cell("", "", false))
+        // Successors
+        .push(data_cell("", "", false))
+        // Resources
+        .push(data_cell("", "", false));
+
     Grid::new()
         .push(headers)
         .extend(content_rows)
+        .push(new_row)
         .width(Length::Fill)
         .height(Length::Shrink)
         .into()
