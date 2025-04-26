@@ -141,7 +141,7 @@ pub fn update(state: &mut State, message: Message) {
             }
             state.repr[i].duration = d;
         }
-        Message::UpdateResources(_, _) => {}
+        Message::UpdateResources(_i, _s) => {}
         Message::UpdatePredecessors(i, p) => {
             let predecessors = state
                 .project
@@ -259,6 +259,7 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
 
 pub fn view(state: &State) -> Element<'_, Message> {
     let headers = GridRow::new()
+        .push(data_label("Index"))
         .push(data_label("Name"))
         .push(data_label("Description"))
         .push(data_label("Completed"))
@@ -275,9 +276,11 @@ pub fn view(state: &State) -> Element<'_, Message> {
         .enumerate()
         .map(|(i, r)| {
             GridRow::new()
+                // Index
+                .push(data_label(i))
                 // Name
                 .push(
-                    data_cell("Task n1", &r.name, false)
+                    data_cell(format!("Task n{i}"), &r.name, false)
                         .on_input(move |n| Message::UpdateName(i, n)),
                 )
                 // Description

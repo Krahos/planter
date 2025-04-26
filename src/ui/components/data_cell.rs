@@ -1,17 +1,19 @@
+use std::fmt::Display;
+
 use iced::{
     Alignment,
     widget::{TextInput, text_input},
 };
 
 pub fn data_cell<'a, Message>(
-    placeholder: &str,
+    placeholder: impl Display,
     value: &'a str,
     is_error: bool,
 ) -> TextInput<'a, Message>
 where
     Message: 'a + Clone,
 {
-    text_input(placeholder, value)
+    text_input(&placeholder.to_string(), value)
         .align_x(Alignment::Center)
         .style(move |theme: &iced::Theme, status| {
             if value.is_empty() {
