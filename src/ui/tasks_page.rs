@@ -1,5 +1,5 @@
 use chrono::NaiveDateTime;
-use iced::widget::checkbox;
+use iced::widget::{button, checkbox};
 use iced::{Element, Length};
 use iced_aw::{Grid, GridRow};
 use once_cell::sync::Lazy;
@@ -49,6 +49,7 @@ pub enum Message {
     UpdateResources(usize, String),
     UpdateNewTask(String),
     CreateNewTask,
+    DeleteTask(usize),
 }
 
 impl Default for State {
@@ -222,6 +223,60 @@ pub fn update(state: &mut State, message: Message) {
             state.new_task = "".to_owned();
         }
         Message::UpdateNewTask(n) => state.new_task = n,
+        Message::DeleteTask(i) => {
+            state
+                .project
+                .rm_task(i)
+                .expect("Should have been possible to remove a task. This is a bug.");
+            update_repr(state);
+        }
+    }
+}
+
+fn update_repr(state: &mut State) {
+    state.repr.clear();
+
+    for (i, task) in state.project.tasks().enumerate() {
+        state.repr.push(Repr {
+            name: task.name().to_owned(),
+            description: task.description().to_owned(),
+            completed: task.completed(),
+            start: if let Some(start) = task.start() {
+                start.to_string()
+            } else {
+                "".to_owned()
+            },
+            is_start_err: false,
+            finish: if let Some(finish) = task.finish() {
+                finish.to_string()
+            } else {
+                "".to_owned()
+            },
+            is_finish_err: false,
+            duration: if let Some(duration) = task.duration() {
+                duration.to_string()
+            } else {
+                "".to_owned()
+            },
+            is_duration_err: false,
+            predecessors: state
+                .project
+                .predecessors_indices(i)
+                .into_iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<String>>()
+                .join(";"),
+            is_predecessors_err: false,
+            successors: state
+                .project
+                .successors_indices(i)
+                .into_iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<String>>()
+                .join(";"),
+            is_successors_err: false,
+            resources: "".to_owned(),
+        });
     }
 }
 
@@ -281,7 +336,8 @@ pub fn view(state: &State) -> Element<'_, Message> {
         .push(data_label("Duration"))
         .push(data_label("Predecessors"))
         .push(data_label("Successors"))
-        .push(data_label("Resources"));
+        .push(data_label("Resources"))
+        .push(data_label("Delete"));
 
     let content_rows: Vec<GridRow<'_, _>> = state
         .repr
@@ -333,6 +389,8 @@ pub fn view(state: &State) -> Element<'_, Message> {
                     data_cell("", &r.resources, false)
                         .on_input(move |res| Message::UpdateResources(i, res)),
                 )
+                // Delete
+                .push(button("Del").on_press(Message::DeleteTask(i)))
         })
         .collect();
 
