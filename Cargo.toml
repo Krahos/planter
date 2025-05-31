@@ -11,3 +11,12 @@ repository = "https://github.com/krahos/planter"
 edition = "2024"
 
 [dependencies]
+chrono = "0.4.40"
+iced = "0.13.1"
+iced_aw = {git = "https://github.com/iced-rs/iced_aw.git"}
+once_cell = "1.21.3"
+planter-core = {git = "https://github.com/krahos/planter-core.git"}
+regex = "1.11.1"
+
+[dev-dependencies]
+proptest = "1.6.0"

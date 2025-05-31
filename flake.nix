@@ -17,15 +17,32 @@
       in
       with pkgs;
       {
-        devShells.default = mkShell {
-          buildInputs = [
+        devShells.default = mkShell rec {
+        buildInputs = [
             bacon
             cargo-udeps
             cargo-edit
             rust-analyzer
             cargo-deny
             rust-bin.stable.latest.default
+
+            pkg-config
+            dbus
+            libxkbcommon
+            expat
+            fontconfig
+            freetype
+            freetype.dev
+            libGL
+            libxkbcommon
+          ] ++ lib.optionals (stdenv.isLinux) [
+            wayland
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXi
+            xorg.libXrandr
           ];
+          LD_LIBRARY_PATH = lib.makeLibraryPath (buildInputs);
         };
       }
     );
