@@ -1,11 +1,11 @@
-struct Wbs {}
+// struct Wbs {}
 
-enum Message {}
+// enum Message {}
 
-impl Wbs {
-    fn update(&mut self, message: Message) {
-        match message {}
-    }
+// impl Wbs {
+//     fn update(&mut self, message: Message) {
+//         match message {}
+//     }
 
-    // fn view(&self) -> Element<Message> {}
-}
+//     // fn view(&self) -> Element<Message> {}
+// }

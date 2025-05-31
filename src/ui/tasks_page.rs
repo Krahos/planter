@@ -66,41 +66,24 @@ pub fn update(state: &mut State, message: Message) {
     match message {
         Message::UpdateName(i, n) => {
             state.repr[i].name = n.clone();
-            state
-                .project
-                .task_mut(i.try_into().unwrap())
-                .unwrap()
-                .edit_name(n);
+            state.project.task_mut(i).unwrap().edit_name(n);
         }
         Message::UpdateDescription(i, d) => {
             state.repr[i].description = d.clone();
-            state
-                .project
-                .task_mut(i.try_into().unwrap())
-                .unwrap()
-                .edit_description(d);
+            state.project.task_mut(i).unwrap().edit_description(d);
         }
         Message::ToggleCompleted(i) => {
             state.repr[i].completed = !state.repr[i].completed;
-            state
-                .project
-                .task_mut(i.try_into().unwrap())
-                .unwrap()
-                .toggle_completed();
+            state.project.task_mut(i).unwrap().toggle_completed();
         }
         Message::UpdateStart(i, s) => {
             if let Ok(date) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M") {
                 state
                     .project
-                    .task_mut(i.try_into().unwrap())
+                    .task_mut(i)
                     .unwrap()
                     .edit_start(date.and_utc());
-                if let Some(duration) = state
-                    .project
-                    .task_mut(i.try_into().unwrap())
-                    .unwrap()
-                    .duration()
-                {
+                if let Some(duration) = state.project.task_mut(i).unwrap().duration() {
                     state.repr[i].duration = duration.to_string();
                     state.repr[i].duration = format!("{} hour(s)", duration.num_hours());
                 }
@@ -114,15 +97,10 @@ pub fn update(state: &mut State, message: Message) {
             if let Ok(date) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M") {
                 state
                     .project
-                    .task_mut(i.try_into().unwrap())
+                    .task_mut(i)
                     .unwrap()
                     .edit_finish(date.and_utc());
-                if let Some(duration) = state
-                    .project
-                    .task_mut(i.try_into().unwrap())
-                    .unwrap()
-                    .duration()
-                {
+                if let Some(duration) = state.project.task_mut(i).unwrap().duration() {
                     state.repr[i].duration = format!("{} hour(s)", duration.num_hours());
                 }
 
@@ -134,11 +112,7 @@ pub fn update(state: &mut State, message: Message) {
         }
         Message::UpdateDuration(i, d) => {
             if let Ok(duration) = PositiveDuration::parse_from_str(&d) {
-                state
-                    .project
-                    .task_mut(i.try_into().unwrap())
-                    .unwrap()
-                    .edit_duration(duration);
+                state.project.task_mut(i).unwrap().edit_duration(duration);
                 state.repr[i].is_duration_err = false;
             } else {
                 state.repr[i].is_duration_err = true;
@@ -152,11 +126,7 @@ pub fn update(state: &mut State, message: Message) {
                 .predecessors_indices(i)
                 .collect::<Vec<usize>>();
             let is_failure = if let Some(indices) = parse_indices(&p) {
-                if state.project.update_predecessors(i, &indices).is_err() {
-                    true
-                } else {
-                    false
-                }
+                state.project.update_predecessors(i, &indices).is_err()
             } else {
                 true
             };
@@ -184,11 +154,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::UpdateSuccessors(i, p) => {
             let successors = state.project.successors_indices(i).collect::<Vec<usize>>();
             let is_failure = if let Some(indices) = parse_indices(&p) {
-                if state.project.update_successors(i, &indices).is_err() {
-                    true
-                } else {
-                    false
-                }
+                state.project.update_successors(i, &indices).is_err()
             } else {
                 true
             };
@@ -262,7 +228,6 @@ fn update_repr(state: &mut State) {
             predecessors: state
                 .project
                 .predecessors_indices(i)
-                .into_iter()
                 .map(|p| p.to_string())
                 .collect::<Vec<String>>()
                 .join(";"),
@@ -270,7 +235,6 @@ fn update_repr(state: &mut State) {
             successors: state
                 .project
                 .successors_indices(i)
-                .into_iter()
                 .map(|p| p.to_string())
                 .collect::<Vec<String>>()
                 .join(";"),
@@ -285,7 +249,6 @@ fn update_predecessors_repr(state: &mut State, predecessors: &[usize]) {
         state.repr[predecessor].successors = state
             .project
             .successors_indices(predecessor)
-            .into_iter()
             .map(|p| p.to_string())
             .collect::<Vec<String>>()
             .join(";");
@@ -297,7 +260,6 @@ fn update_successors_repr(state: &mut State, successors: &[usize]) {
         state.repr[successor].predecessors = state
             .project
             .predecessors_indices(successor)
-            .into_iter()
             .map(|p| p.to_string())
             .collect::<Vec<String>>()
             .join(";");
@@ -314,7 +276,7 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
         Some(
             s.split(';')
                 .map(|index_s| {
-                    index_s.parse::<usize>().expect(&format!(
+                    index_s.parse::<usize>().unwrap_or_else(|_| panic!(
                         "It should have been possible to parse {index_s} as usize. This is a bug."
                     ))
                 })
@@ -400,7 +362,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
         // Name
         .push(
             data_cell("New task name", &state.new_task, false)
-                .on_input(move |n| Message::UpdateNewTask(n))
+                .on_input(Message::UpdateNewTask)
                 .on_submit(Message::CreateNewTask),
         )
         // Description
