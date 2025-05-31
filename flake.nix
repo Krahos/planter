@@ -18,7 +18,7 @@
       with pkgs;
       {
         devShells.default = mkShell rec {
-          nativeBuildInputs = [
+        buildInputs = [
             bacon
             cargo-udeps
             cargo-edit
@@ -27,12 +27,22 @@
             rust-bin.stable.latest.default
 
             pkg-config
-            wayland
+            dbus
             libxkbcommon
+            expat
+            fontconfig
+            freetype
+            freetype.dev
+            libGL
+            libxkbcommon
+          ] ++ lib.optionals (stdenv.isLinux) [
+            wayland
             xorg.libX11
+            xorg.libXcursor
+            xorg.libXi
             xorg.libXrandr
           ];
-          LD_LIBRARY_PATH = "${lib.makeLibraryPath nativeBuildInputs}";
+          LD_LIBRARY_PATH = lib.makeLibraryPath (buildInputs);
         };
       }
     );
