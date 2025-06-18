@@ -1,7 +1,7 @@
-use ui::tasks_page;
+use ui::{personnel_page, tasks_page};
 
 mod ui;
 
 fn main() -> iced::Result {
-    iced::application("Planter", tasks_page::update, tasks_page::view).run()
+    iced::application("Planter", personnel_page::update, personnel_page::view).run()
 }
