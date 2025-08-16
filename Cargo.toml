@@ -12,12 +12,16 @@ edition = "2024"
 
 [dependencies]
 chrono = "0.4.40"
-iced = "0.13.1"
-iced_aw = {git = "https://github.com/iced-rs/iced_aw.git"}
+iced = {features = ["advanced"], version = "0.14.0-dev"}
 once_cell = "1.21.3"
 # planter-core = {git = "https://github.com/krahos/planter-core.git"}
 planter-core = {path = "../planter-core"}
 regex = "1.11.1"
+
+[patch.crates-io]
+iced = { git = "https://github.com/iced-rs/iced.git"}
+iced_core = { git = "https://github.com/iced-rs/iced.git"}
+iced_widget = { git = "https://github.com/iced-rs/iced.git"}
 
 [dev-dependencies]
 proptest = "1.6.0"

@@ -1,7 +1,6 @@
 use chrono::NaiveDateTime;
-use iced::widget::{button, checkbox};
+use iced::widget::{Column, Row, button, checkbox};
 use iced::{Element, Length};
-use iced_aw::{Grid, GridRow};
 use once_cell::sync::Lazy;
 use planter_core::duration::PositiveDuration;
 use planter_core::project::Project;
@@ -288,7 +287,7 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
 }
 
 pub fn view(state: &State) -> Element<'_, Message> {
-    let headers = GridRow::new()
+    let headers = Row::new()
         .push(data_label("Index"))
         .push(data_label("Name"))
         .push(data_label("Description"))
@@ -301,12 +300,12 @@ pub fn view(state: &State) -> Element<'_, Message> {
         .push(data_label("Resources"))
         .push(data_label("Delete"));
 
-    let content_rows: Vec<GridRow<'_, _>> = state
+    let content_rows: Vec<Element<'_, _>> = state
         .repr
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            GridRow::new()
+            Row::new()
                 // Index
                 .push(data_label(i))
                 // Name
@@ -353,10 +352,11 @@ pub fn view(state: &State) -> Element<'_, Message> {
                 )
                 // Delete
                 .push(button("Del").on_press(Message::DeleteTask(i)))
+                .into()
         })
         .collect();
 
-    let new_row = GridRow::new()
+    let new_row = Row::new()
         // Index
         .push(data_label(""))
         // Name
@@ -382,11 +382,10 @@ pub fn view(state: &State) -> Element<'_, Message> {
         // Resources
         .push(data_cell("", "", false));
 
-    Grid::new()
+    Column::new()
         .push(headers)
         .extend(content_rows)
         .push(new_row)
-        .width(Length::Fill)
         .height(Length::Shrink)
         .into()
 }

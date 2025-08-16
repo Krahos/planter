@@ -1,6 +1,8 @@
 use core::panic;
-use iced::{Element, Length, widget::button};
-use iced_aw::{Grid, GridRow};
+use iced::{
+    Element,
+    widget::{Column, Row, button},
+};
 use planter_core::{
     person::{EmailAddress, Person, PhoneNumber},
     project::Project,
@@ -153,8 +155,8 @@ pub fn update(state: &mut State, message: Message) {
     }
 }
 
-pub fn view(state: &State) -> Element<Message> {
-    let headers = GridRow::new()
+pub fn view(state: &State) -> Element<'_, Message> {
+    let headers = Row::new()
         .push(data_label("Index"))
         .push(data_label("Name"))
         .push(data_label("Surname"))
@@ -163,12 +165,12 @@ pub fn view(state: &State) -> Element<Message> {
         .push(data_label("Hourly Rate"))
         .push(data_label(""));
 
-    let content_rows: Vec<GridRow<'_, _>> = state
+    let content_rows: Vec<Element<'_, _>> = state
         .repr
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            GridRow::new()
+            Row::new()
                 .push(data_label(i))
                 .push(
                     data_cell("Sebastiano", &r.first_name, false)
@@ -191,10 +193,11 @@ pub fn view(state: &State) -> Element<Message> {
                         .on_input(move |h| Message::UpdateHourlyRate(i, h)),
                 )
                 .push(button("Del").on_press(Message::DeletePersonnel(i)))
+                .into()
         })
         .collect();
 
-    let new_row = GridRow::new()
+    let new_row = Row::new()
         .push(data_label(""))
         .push(
             data_cell("Sebastiano", &state.new_person_name, state.is_new_name_err)
@@ -210,11 +213,9 @@ pub fn view(state: &State) -> Element<Message> {
         .push(data_cell("", "", false))
         .push(data_cell("", "", false));
 
-    Grid::new()
+    Column::new()
         .push(headers)
         .extend(content_rows)
         .push(new_row)
-        .width(Length::Fill)
-        .height(Length::Shrink)
         .into()
 }
