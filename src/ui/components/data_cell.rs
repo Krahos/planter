@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use iced::{
-    Alignment, Color,
+    Alignment,
     widget::{TextInput, text_input},
 };
 
@@ -18,7 +18,7 @@ where
         .style(move |theme: &iced::Theme, status| text_input::Style {
             border: iced::Border {
                 color: if !is_error {
-                    Color::default()
+                    theme.palette().primary
                 } else {
                     theme.extended_palette().danger.base.color
                 },
@@ -27,4 +27,5 @@ where
             },
             ..text_input::default(theme, status)
         })
+        .width(100)
 }

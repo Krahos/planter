@@ -12,7 +12,7 @@ edition = "2024"
 
 [dependencies]
 chrono = "0.4.40"
-iced = {features = ["advanced"], version = "0.14.0-dev"}
+iced = {features = ["advanced", "lazy"], version = "0.14.0-dev"}
 once_cell = "1.21.3"
 # planter-core = {git = "https://github.com/krahos/planter-core.git"}
 planter-core = {path = "../planter-core"}
