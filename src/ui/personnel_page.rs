@@ -52,11 +52,7 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
         PersonnelMessage::UpdateName(i, n) => {
             match project.resource_mut(i).unwrap() {
                 Resource::Personnel { person, .. } => {
-                    if person.update_first_name(&n).is_err() {
-                        state.repr[i].is_first_name_err = true;
-                    } else {
-                        state.repr[i].is_first_name_err = false;
-                    }
+                    state.repr[i].is_first_name_err = person.update_first_name(&n).is_err();
                 }
                 _ => panic!(),
             }
@@ -65,11 +61,7 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
         PersonnelMessage::UpdateSurname(i, s) => {
             match project.resource_mut(i).unwrap() {
                 Resource::Personnel { person, .. } => {
-                    if person.update_last_name(&s).is_err() {
-                        state.repr[i].is_last_name_err = true;
-                    } else {
-                        state.repr[i].is_last_name_err = false;
-                    }
+                    state.repr[i].is_last_name_err = person.update_last_name(&s).is_err();
                 }
                 _ => panic!(),
             }
@@ -118,7 +110,7 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
             }
             if let Some(person) = Person::new(&state.new_person_name, &state.new_person_surname) {
                 let personnel = Resource::Personnel {
-                    person: person,
+                    person,
                     hourly_rate: None,
                 };
                 project.add_resource(personnel);
@@ -160,7 +152,7 @@ pub fn view(state: &PersonnelState) -> Element<'_, PersonnelMessage> {
         .push(data_label("Name"))
         .push(data_label("Surname"))
         .push(data_label("E-Mail"))
-        .push(data_label("Phone Number"))
+        .push(data_label("Phone"))
         .push(data_label("Hourly Rate"))
         .push(data_label("Delete"));
 
@@ -191,7 +183,12 @@ pub fn view(state: &PersonnelState) -> Element<'_, PersonnelMessage> {
                     data_cell("50.00", &r.hourly_rate, false)
                         .on_input(move |h| PersonnelMessage::UpdateHourlyRate(i, h)),
                 )
-                .push(button("Del").on_press(PersonnelMessage::DeletePersonnel(i)))
+                .push(
+                    button("Del")
+                        .on_press(PersonnelMessage::DeletePersonnel(i))
+                        .width(100)
+                        .height(50),
+                )
                 .into()
         })
         .collect();

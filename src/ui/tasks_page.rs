@@ -341,7 +341,11 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                         .on_input(move |res| TasksMessage::UpdateResources(i, res)),
                 )
                 // Delete
-                .push(button("Del").on_press(TasksMessage::DeleteTask(i)))
+                .push(
+                    button("Del")
+                        .on_press(TasksMessage::DeleteTask(i))
+                        .width(100),
+                )
                 .into()
         })
         .collect();
@@ -356,12 +360,12 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                 .on_submit(TasksMessage::CreateNewTask),
         )
         // Description
-        .push(data_cell("This task...", "", false))
+        .push(data_cell("", "", false))
         // Completed
         .push(
             container(checkbox("", false))
+                .height(30)
                 .width(100)
-                .height(50)
                 .align_x(Horizontal::Center)
                 .align_y(Vertical::Center),
         )

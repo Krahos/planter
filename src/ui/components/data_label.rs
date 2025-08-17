@@ -14,8 +14,7 @@ pub fn data_label<'a, Message>(
             .width(Length::Fill)
             .align_x(Alignment::Center)
             .align_y(Vertical::Center)
-            .width(100)
-            .height(50),
+            .width(100),
     )
     .align_x(Horizontal::Center)
     .align_y(Vertical::Center)
@@ -24,7 +23,6 @@ pub fn data_label<'a, Message>(
             width: 1.0,
             radius: 0.0.into(),
             color: theme.palette().primary,
-            ..Default::default()
         },
         ..Default::default()
     })

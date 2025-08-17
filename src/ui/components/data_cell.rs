@@ -5,6 +5,8 @@ use iced::{
     widget::{TextInput, text_input},
 };
 
+use crate::ui::constants::WIDTH;
+
 pub fn data_cell<'a, Message>(
     placeholder: impl Display,
     value: impl Display,
@@ -27,5 +29,5 @@ where
             },
             ..text_input::default(theme, status)
         })
-        .width(100)
+        .width(WIDTH)
 }
