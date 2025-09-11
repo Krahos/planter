@@ -129,16 +129,17 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
             state.repr.remove(i);
         }
         PersonnelMessage::UpdateHourlyRate(i, r) => {
-            if let Ok(amount) = r.parse::<u16>() {
+            if let Ok(amount) = r.parse::<f32>() {
                 match project.resource_mut(i).unwrap() {
                     Resource::Personnel { hourly_rate, .. } => {
-                        *hourly_rate = Some(amount);
+                        *hourly_rate = Some((amount * 100.) as u16);
                     }
                     _ => panic!(),
                 }
                 state.repr[i].hourly_rate = r;
                 state.repr[i].is_rate_err = false;
             } else if r.is_empty() {
+                // TODO: Remove rate from project
                 state.repr[i].hourly_rate = r;
                 state.repr[i].is_rate_err = false;
             }

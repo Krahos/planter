@@ -10,6 +10,7 @@ use planter_core::project::Project;
 use ui::{personnel_page, tasks_page};
 
 use crate::ui::{
+    materials_page::{self, MaterialsMessage, MaterialsState},
     personnel_page::{PersonnelMessage, PersonnelState},
     tasks_page::{TasksMessage, TasksState},
 };
@@ -24,6 +25,7 @@ struct Appstate {
     project: Project,
     tasks_state: TasksState,
     personnel_state: PersonnelState,
+    materials_state: MaterialsState,
     panes: pane_grid::State<Pane>,
     focus: Option<pane_grid::Pane>,
 }
@@ -33,6 +35,7 @@ enum PaneType {
     #[default]
     Tasks,
     Personnel,
+    Materials,
 }
 
 #[derive(Clone, Debug)]
@@ -42,7 +45,8 @@ enum AppMessage {
     PaneResized(pane_grid::ResizeEvent),
     TasksMessage(TasksMessage),
     PersonnelMessage(PersonnelMessage),
-    Close(pane_grid::Pane),
+    MaterialsMessage(MaterialsMessage),
+    // Close(pane_grid::Pane),
     Restore,
     Maximize(pane_grid::Pane),
     TogglePin(pane_grid::Pane),
@@ -72,12 +76,17 @@ fn update(state: &mut Appstate, message: AppMessage) {
             &mut state.project,
             personnel_message,
         ),
+        AppMessage::MaterialsMessage(materials_message) => materials_page::update(
+            &mut state.materials_state,
+            &mut state.project,
+            materials_message,
+        ),
         AppMessage::PaneClicked(pane) => state.focus = Some(pane),
-        AppMessage::Close(pane) => {
-            if let Some((_, sibling)) = state.panes.close(pane) {
-                state.focus = Some(sibling);
-            }
-        }
+        // AppMessage::Close(pane) => {
+        //     if let Some((_, sibling)) = state.panes.close(pane) {
+        //         state.focus = Some(sibling);
+        //     }
+        // }
         AppMessage::Restore => state.panes.restore(),
         AppMessage::Maximize(pane) => state.panes.maximize(pane),
         AppMessage::TogglePin(pane) => {
@@ -104,6 +113,10 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
                 "Personnel",
                 personnel_page::view(&app_state.personnel_state).map(AppMessage::from),
             ),
+            PaneType::Materials => (
+                "Materials",
+                materials_page::view(&app_state.materials_state).map(AppMessage::from),
+            ),
         };
         let title = row![text(title).color(if is_focused {
             PANE_ID_COLOR_FOCUSED
@@ -113,17 +126,12 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
         .spacing(5);
 
         let title_bar = pane_grid::TitleBar::new(title)
-            .controls(pane_grid::Controls::dynamic(
-                view_controls(id, total_panes, pane.is_pinned, is_maximized),
-                button(text("X").size(14))
-                    .style(button::danger)
-                    .padding(3)
-                    .on_press_maybe(if total_panes > 1 && !pane.is_pinned {
-                        Some(AppMessage::Close(id))
-                    } else {
-                        None
-                    }),
-            ))
+            .controls(pane_grid::Controls::new(view_controls(
+                id,
+                total_panes,
+                pane.is_pinned,
+                is_maximized,
+            )))
             .padding(10)
             .style(if is_focused {
                 style::title_bar_focused
@@ -154,20 +162,30 @@ impl Appstate {
             is_pinned: false,
             pane_type: PaneType::Tasks,
         });
-        panes.split(
+        if let Some((pane, _)) = panes.split(
             pane_grid::Axis::Vertical,
             pane,
             Pane {
                 is_pinned: false,
                 pane_type: PaneType::Personnel,
             },
-        );
+        ) {
+            panes.split(
+                pane_grid::Axis::Horizontal,
+                pane,
+                Pane {
+                    is_pinned: false,
+                    pane_type: PaneType::Materials,
+                },
+            );
+        }
 
         Appstate {
             panes,
             project: Project::new("World conquer"),
             tasks_state: TasksState::default(),
             personnel_state: PersonnelState::default(),
+            materials_state: MaterialsState::default(),
             focus: None,
         }
     }
@@ -188,6 +206,12 @@ impl From<TasksMessage> for AppMessage {
 impl From<PersonnelMessage> for AppMessage {
     fn from(value: PersonnelMessage) -> Self {
         AppMessage::PersonnelMessage(value)
+    }
+}
+
+impl From<MaterialsMessage> for AppMessage {
+    fn from(value: MaterialsMessage) -> Self {
+        AppMessage::MaterialsMessage(value)
     }
 }
 
@@ -229,16 +253,16 @@ fn view_controls<'a>(
         None
     };
 
-    let close = button(text("Close").size(14))
-        .style(button::danger)
-        .padding(3)
-        .on_press_maybe(if total_panes > 1 && !is_pinned {
-            Some(AppMessage::Close(pane))
-        } else {
-            None
-        });
+    // let close = button(text("Close").size(14))
+    //     .style(button::danger)
+    //     .padding(3)
+    //     .on_press_maybe(if total_panes > 1 && !is_pinned {
+    //         Some(AppMessage::Close(pane))
+    //     } else {
+    //         None
+    //     });
 
-    row![pin, maximize, close].spacing(5).into()
+    row![pin, maximize].spacing(5).into()
 }
 
 mod style {
