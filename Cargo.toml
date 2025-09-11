@@ -5,18 +5,18 @@ authors = ["Sebastiano Giordano"]
 description = "PlanTer is a project management application."
 documentation = "https://docs.rs/planter"
 keywords = ["project_management"]
-license = "Agpl-3.0"
+license = "AGPL-3.0-or-later"
 readme = "README.md"
 repository = "https://github.com/krahos/planter"
 edition = "2024"
 
 [dependencies]
-chrono = "0.4.40"
+chrono = "0.4.42"
 iced = {features = ["advanced", "lazy"], version = "0.14.0-dev"}
 once_cell = "1.21.3"
-# planter-core = {git = "https://github.com/krahos/planter-core.git"}
-planter-core = {path = "../planter-core"}
-regex = "1.11.1"
+planter-core = "0.0.2"
+# planter-core = {path = "../planter-core"}
+regex = "1.11.2"
 
 [patch.crates-io]
 iced = { git = "https://github.com/iced-rs/iced.git"}
@@ -24,4 +24,4 @@ iced_core = { git = "https://github.com/iced-rs/iced.git"}
 iced_widget = { git = "https://github.com/iced-rs/iced.git"}
 
 [dev-dependencies]
-proptest = "1.6.0"
+proptest = "1.7.0"
