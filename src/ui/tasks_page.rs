@@ -269,7 +269,7 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
 
 pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
     let headers = Row::new()
-        .push(data_label("Index"))
+        .push(data_label("Task ID"))
         .push(data_label("Name"))
         .push(data_label("Description"))
         .push(data_label("Completed"))
@@ -278,8 +278,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .push(data_label("Duration"))
         .push(data_label("Predecessors"))
         .push(data_label("Successors"))
-        .push(data_label("Resources"))
-        .push(data_label("Delete"));
+        .push(data_label("Resources"));
 
     let content_rows: Vec<Element<'_, _>> = state
         .repr

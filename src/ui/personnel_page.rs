@@ -22,6 +22,7 @@ pub struct PersonnelState {
 
 #[derive(Debug, Default)]
 struct Repr {
+    res_id: usize,
     first_name: String,
     is_first_name_err: bool,
     last_name: String,
@@ -36,21 +37,21 @@ struct Repr {
 
 #[derive(Debug, Clone)]
 pub enum PersonnelMessage {
-    UpdateName(usize, String),
-    UpdateSurname(usize, String),
-    UpdateEmail(usize, String),
-    UpdatePhoneNumber(usize, String),
-    UpdateHourlyRate(usize, String),
+    UpdateName(usize, usize, String),
+    UpdateSurname(usize, usize, String),
+    UpdateEmail(usize, usize, String),
+    UpdatePhoneNumber(usize, usize, String),
+    UpdateHourlyRate(usize, usize, String),
     UpdateNewName(String),
     UpdateNewSurname(String),
     CreateNewPersonnel,
-    DeletePersonnel(usize),
+    DeletePersonnel(usize, usize),
 }
 
 pub fn update(state: &mut PersonnelState, project: &mut Project, message: PersonnelMessage) {
     match message {
-        PersonnelMessage::UpdateName(i, n) => {
-            match project.resource_mut(i).unwrap() {
+        PersonnelMessage::UpdateName(i, res_id, n) => {
+            match project.resource_mut(res_id).unwrap() {
                 Resource::Personnel { person, .. } => {
                     state.repr[i].is_first_name_err = person.update_first_name(&n).is_err();
                 }
@@ -58,8 +59,8 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
             }
             state.repr[i].first_name = n;
         }
-        PersonnelMessage::UpdateSurname(i, s) => {
-            match project.resource_mut(i).unwrap() {
+        PersonnelMessage::UpdateSurname(i, res_id, s) => {
+            match project.resource_mut(res_id).unwrap() {
                 Resource::Personnel { person, .. } => {
                     state.repr[i].is_last_name_err = person.update_last_name(&s).is_err();
                 }
@@ -68,8 +69,8 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
 
             state.repr[i].last_name = s
         }
-        PersonnelMessage::UpdateEmail(i, e) => {
-            match project.resource_mut(i).unwrap() {
+        PersonnelMessage::UpdateEmail(i, res_id, e) => {
+            match project.resource_mut(res_id).unwrap() {
                 Resource::Personnel { person, .. } => {
                     if e.is_empty() {
                         person.rm_email();
@@ -85,8 +86,8 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
             }
             state.repr[i].email = e;
         }
-        PersonnelMessage::UpdatePhoneNumber(i, p) => {
-            match project.resource_mut(i).unwrap() {
+        PersonnelMessage::UpdatePhoneNumber(i, res_id, p) => {
+            match project.resource_mut(res_id).unwrap() {
                 Resource::Personnel { person, .. } => {
                     if p.is_empty() {
                         person.rm_phone();
@@ -114,7 +115,9 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
                     hourly_rate: None,
                 };
                 project.add_resource(personnel);
+                let res_id = project.resources().len() - 1;
                 state.repr.push(Repr {
+                    res_id,
                     first_name: state.new_person_name.clone(),
                     last_name: state.new_person_surname.clone(),
                     ..Default::default()
@@ -125,12 +128,13 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
                 state.is_new_name_err = true;
             }
         }
-        PersonnelMessage::DeletePersonnel(i) => {
+        PersonnelMessage::DeletePersonnel(i, res_id) => {
+            project.rm_resource(res_id);
             state.repr.remove(i);
         }
-        PersonnelMessage::UpdateHourlyRate(i, r) => {
+        PersonnelMessage::UpdateHourlyRate(i, res_id, r) => {
             if let Ok(amount) = r.parse::<f32>() {
-                match project.resource_mut(i).unwrap() {
+                match project.resource_mut(res_id).unwrap() {
                     Resource::Personnel { hourly_rate, .. } => {
                         *hourly_rate = Some((amount * 100.) as u16);
                     }
@@ -149,13 +153,12 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
 
 pub fn view(state: &PersonnelState) -> Element<'_, PersonnelMessage> {
     let headers = Row::new()
-        .push(data_label("Index"))
+        .push(data_label("Resource ID"))
         .push(data_label("Name"))
         .push(data_label("Surname"))
         .push(data_label("E-Mail"))
         .push(data_label("Phone"))
-        .push(data_label("Hourly Rate"))
-        .push(data_label("Delete"));
+        .push(data_label("Hourly Rate"));
 
     let content_rows: Vec<Element<'_, _>> = state
         .repr
@@ -163,30 +166,30 @@ pub fn view(state: &PersonnelState) -> Element<'_, PersonnelMessage> {
         .enumerate()
         .map(|(i, r)| {
             Row::new()
-                .push(data_label(i))
+                .push(data_label(r.res_id))
                 .push(
                     data_cell("Sebastiano", &r.first_name, false)
-                        .on_input(move |n| PersonnelMessage::UpdateName(i, n)),
+                        .on_input(move |n| PersonnelMessage::UpdateName(i, r.res_id, n)),
                 )
                 .push(
                     data_cell("Giordano", &r.last_name, false)
-                        .on_input(move |s| PersonnelMessage::UpdateSurname(i, s)),
+                        .on_input(move |s| PersonnelMessage::UpdateSurname(i, r.res_id, s)),
                 )
                 .push(
                     data_cell("sebastiano.giordano@planter.com", &r.email, r.is_email_err)
-                        .on_input(move |e| PersonnelMessage::UpdateEmail(i, e)),
+                        .on_input(move |e| PersonnelMessage::UpdateEmail(i, r.res_id, e)),
                 )
                 .push(
                     data_cell("+39 3284929293", &r.phone_number, r.is_phone_err)
-                        .on_input(move |p| PersonnelMessage::UpdatePhoneNumber(i, p)),
+                        .on_input(move |p| PersonnelMessage::UpdatePhoneNumber(i, r.res_id, p)),
                 )
                 .push(
                     data_cell("50.00", &r.hourly_rate, false)
-                        .on_input(move |h| PersonnelMessage::UpdateHourlyRate(i, h)),
+                        .on_input(move |h| PersonnelMessage::UpdateHourlyRate(i, r.res_id, h)),
                 )
                 .push(
                     button("Del")
-                        .on_press(PersonnelMessage::DeletePersonnel(i))
+                        .on_press(PersonnelMessage::DeletePersonnel(i, r.res_id))
                         .width(100)
                         .height(50),
                 )

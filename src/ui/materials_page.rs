@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use iced::{
     Element, Length,
-    widget::{Column, Row, pick_list},
+    widget::{Column, Row, Space, button, pick_list},
 };
 use planter_core::{
     project::Project,
@@ -32,6 +32,7 @@ impl Default for Repr {
 
 #[derive(Debug, Default, Clone)]
 struct ConsumableRepr {
+    res_id: usize,
     name: String,
     quantity: String,
     is_quantity_err: bool,
@@ -41,6 +42,7 @@ struct ConsumableRepr {
 
 #[derive(Debug, Default, Clone)]
 struct NonConsumableRepr {
+    res_id: usize,
     name: String,
     quantity: String,
     is_quantity_err: bool,
@@ -51,6 +53,7 @@ struct NonConsumableRepr {
 impl Into<NonConsumableRepr> for ConsumableRepr {
     fn into(self) -> NonConsumableRepr {
         NonConsumableRepr {
+            res_id: self.res_id,
             name: self.name,
             quantity: self.quantity,
             is_quantity_err: self.is_quantity_err,
@@ -63,6 +66,7 @@ impl Into<NonConsumableRepr> for ConsumableRepr {
 impl Into<ConsumableRepr> for NonConsumableRepr {
     fn into(self) -> ConsumableRepr {
         ConsumableRepr {
+            res_id: self.res_id,
             name: self.name,
             quantity: self.quantity,
             is_quantity_err: self.is_quantity_err,
@@ -73,6 +77,12 @@ impl Into<ConsumableRepr> for NonConsumableRepr {
 }
 
 impl Repr {
+    fn update_res_id(&mut self, res_id: usize) {
+        match self {
+            Repr::Consumable(consumable_repr) => consumable_repr.res_id = res_id,
+            Repr::NonConsumable(non_consumable_repr) => non_consumable_repr.res_id = res_id,
+        }
+    }
     fn update_name(&mut self, new_name: impl ToString) {
         match self {
             Repr::Consumable(consumable_repr) => consumable_repr.name = new_name.to_string(),
@@ -118,7 +128,7 @@ impl Repr {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Selection {
+pub enum Selection {
     Consumable,
     NonConsumable,
 }
@@ -134,33 +144,33 @@ impl Display for Selection {
 
 #[derive(Debug, Clone)]
 pub enum MaterialsMessage {
-    UpdateName(usize, String),
-    UpdateQuantity(usize, String),
-    UpdateCost(usize, String),
-    Typeselected(usize, Selection),
+    UpdateName(usize, usize, String),
+    UpdateQuantity(usize, usize, String),
+    UpdateCost(usize, usize, String),
+    Typeselected(usize, usize, Selection),
     UpdateNewName(String),
     CreateNewMaterial,
-    DeleteMaterial(usize),
+    DeleteMaterial(usize, usize),
 }
 
 pub fn update(state: &mut MaterialsState, project: &mut Project, message: MaterialsMessage) {
     match message {
-        MaterialsMessage::UpdateName(i, n) => {
-            match project.resource_mut(i).unwrap() {
+        MaterialsMessage::UpdateName(i, res_id, n) => {
+            match project.resource_mut(res_id).unwrap() {
                 Resource::Material(material) => material.update_name(&n),
                 _ => panic!(),
             }
             state.repr[i].update_name(n);
         }
-        MaterialsMessage::UpdateQuantity(i, q) => {
+        MaterialsMessage::UpdateQuantity(i, res_id, q) => {
             if let Ok(quantity) = q.parse::<u16>() {
-                match project.resource_mut(i).unwrap() {
+                match project.resource_mut(res_id).unwrap() {
                     Resource::Material(material) => material.update_quantity(quantity),
                     _ => panic!(),
                 }
                 state.repr[i].update_is_quantity_err(false);
             } else if q.is_empty() {
-                match project.resource_mut(i).unwrap() {
+                match project.resource_mut(res_id).unwrap() {
                     Resource::Material(material) => material.remove_quantity(),
                     _ => panic!(),
                 }
@@ -170,9 +180,9 @@ pub fn update(state: &mut MaterialsState, project: &mut Project, message: Materi
             }
             state.repr[i].update_quantity(q);
         }
-        MaterialsMessage::UpdateCost(i, c) => {
+        MaterialsMessage::UpdateCost(i, res_id, c) => {
             if let Ok(cost) = c.parse::<f32>() {
-                match project.resource_mut(i).unwrap() {
+                match project.resource_mut(res_id).unwrap() {
                     Resource::Material(material) => {
                         material.update_cost_per_unit((cost * 100.) as u16)
                     }
@@ -180,7 +190,7 @@ pub fn update(state: &mut MaterialsState, project: &mut Project, message: Materi
                 }
                 state.repr[i].update_is_cost_err(false);
             } else if c.is_empty() {
-                match project.resource_mut(i).unwrap() {
+                match project.resource_mut(res_id).unwrap() {
                     Resource::Material(material) => material.remove_cost_per_unit(),
                     _ => panic!(),
                 }
@@ -190,13 +200,15 @@ pub fn update(state: &mut MaterialsState, project: &mut Project, message: Materi
             }
             state.repr[i].update_cost(c);
         }
-        MaterialsMessage::Typeselected(i, s) => match (&mut state.repr[i], s) {
+        MaterialsMessage::Typeselected(i, res_id, s) => match (&mut state.repr[i], s) {
             (Repr::Consumable(_), Selection::Consumable) => {}
             (Repr::Consumable(consumable_repr), Selection::NonConsumable) => {
                 state.repr[i] = Repr::NonConsumable((consumable_repr).clone().into());
+                project.res_into_nonconsumable(res_id).unwrap();
             }
             (Repr::NonConsumable(non_consumable_repr), Selection::Consumable) => {
                 state.repr[i] = Repr::Consumable((non_consumable_repr).clone().into());
+                project.res_into_consumable(res_id).unwrap();
             }
             (Repr::NonConsumable(_), Selection::NonConsumable) => {}
         },
@@ -210,20 +222,25 @@ pub fn update(state: &mut MaterialsState, project: &mut Project, message: Materi
 
             let material = Material::NonConsumable(NonConsumable::new(&state.new_material_name));
             project.add_resource(Resource::Material(material));
+            let res_id = project.resources().len() - 1;
             state.repr.push(Repr::NonConsumable(NonConsumableRepr {
+                res_id,
                 name: state.new_material_name.clone(),
                 ..Default::default()
             }));
 
             state.new_material_name = "".to_owned();
         }
-        MaterialsMessage::DeleteMaterial(_) => todo!(),
+        MaterialsMessage::DeleteMaterial(i, res_id) => {
+            state.repr.remove(i);
+            project.rm_resource(res_id);
+        }
     }
 }
 
 pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
     let headers = Row::new()
-        .push(data_label("Index"))
+        .push(data_label("Resource ID"))
         .push(data_label("Name"))
         .push(data_label("Type"))
         .push(data_label("Quantity"))
@@ -236,35 +253,38 @@ pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
         .enumerate()
         .map(|(i, r)| match r {
             Repr::Consumable(consumable) => Row::new()
-                .push(data_label(i))
+                .push(data_label(consumable.res_id))
                 .push(
                     data_cell("Stimpack", &consumable.name, false)
-                        .on_input(move |n| MaterialsMessage::UpdateName(i, n)),
+                        .on_input(move |n| MaterialsMessage::UpdateName(i, consumable.res_id, n)),
                 )
                 .push(
                     pick_list(options, Some(Selection::Consumable), move |s| {
-                        MaterialsMessage::Typeselected(i, s)
+                        MaterialsMessage::Typeselected(i, consumable.res_id, s)
                     })
                     .width(100),
                 )
                 .push(
-                    data_cell("1", &consumable.quantity, consumable.is_quantity_err)
-                        .on_input(move |q| MaterialsMessage::UpdateQuantity(i, q)),
+                    data_cell("1", &consumable.quantity, consumable.is_quantity_err).on_input(
+                        move |q| MaterialsMessage::UpdateQuantity(i, consumable.res_id, q),
+                    ),
                 )
                 .push(
                     data_cell("20", &consumable.cost_per_unit, consumable.is_cost_err)
-                        .on_input(move |c| MaterialsMessage::UpdateCost(i, c)),
+                        .on_input(move |c| MaterialsMessage::UpdateCost(i, consumable.res_id, c)),
                 )
+                .push(Space::new(100, 50))
                 .into(),
             Repr::NonConsumable(non_consumable) => Row::new()
-                .push(data_label(i))
+                .push(data_label(non_consumable.res_id))
                 .push(
-                    data_cell("Crowbar", &non_consumable.name, false)
-                        .on_input(move |n| MaterialsMessage::UpdateName(i, n)),
+                    data_cell("Crowbar", &non_consumable.name, false).on_input(move |n| {
+                        MaterialsMessage::UpdateName(i, non_consumable.res_id, n)
+                    }),
                 )
                 .push(
                     pick_list(options, Some(Selection::NonConsumable), move |s| {
-                        MaterialsMessage::Typeselected(i, s)
+                        MaterialsMessage::Typeselected(i, non_consumable.res_id, s)
                     })
                     .width(100),
                 )
@@ -274,7 +294,9 @@ pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
                         &non_consumable.quantity,
                         non_consumable.is_quantity_err,
                     )
-                    .on_input(move |q| MaterialsMessage::UpdateQuantity(i, q)),
+                    .on_input(move |q| {
+                        MaterialsMessage::UpdateQuantity(i, non_consumable.res_id, q)
+                    }),
                 )
                 .push(
                     data_cell(
@@ -282,7 +304,12 @@ pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
                         &non_consumable.hourly_rate,
                         non_consumable.is_rate_err,
                     )
-                    .on_input(move |c| MaterialsMessage::UpdateCost(i, c)),
+                    .on_input(move |c| MaterialsMessage::UpdateCost(i, non_consumable.res_id, c)),
+                )
+                .push(
+                    button("Del")
+                        .on_press(MaterialsMessage::DeleteMaterial(i, non_consumable.res_id))
+                        .width(100),
                 )
                 .into(),
         })
