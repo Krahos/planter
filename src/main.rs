@@ -1,5 +1,5 @@
 use iced::{
-    Color, Element, Length,
+    Color, Element, Length, Task,
     widget::{
         PaneGrid, button,
         pane_grid::{self, DragEvent},
@@ -46,6 +46,7 @@ enum AppMessage {
     TasksMessage(TasksMessage),
     PersonnelMessage(PersonnelMessage),
     MaterialsMessage(MaterialsMessage),
+    ResourceDeleted(usize),
     // Close(pane_grid::Pane),
     Restore,
     Maximize(pane_grid::Pane),
@@ -58,18 +59,21 @@ struct Pane {
     pane_type: PaneType,
 }
 
-fn update(state: &mut Appstate, message: AppMessage) {
+fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
     match message {
         AppMessage::PaneDragged(drag_event) => {
             if let DragEvent::Dropped { pane, target } = drag_event {
                 state.panes.drop(pane, target);
             }
+            Task::none()
         }
         AppMessage::PaneResized(resize_event) => {
             state.panes.resize(resize_event.split, resize_event.ratio);
+            Task::none()
         }
         AppMessage::TasksMessage(tasks_message) => {
-            tasks_page::update(&mut state.tasks_state, &mut state.project, tasks_message)
+            tasks_page::update(&mut state.tasks_state, &mut state.project, tasks_message);
+            Task::none()
         }
         AppMessage::PersonnelMessage(personnel_message) => personnel_page::update(
             &mut state.personnel_state,
@@ -81,18 +85,37 @@ fn update(state: &mut Appstate, message: AppMessage) {
             &mut state.project,
             materials_message,
         ),
-        AppMessage::PaneClicked(pane) => state.focus = Some(pane),
-        // AppMessage::Close(pane) => {
-        //     if let Some((_, sibling)) = state.panes.close(pane) {
-        //         state.focus = Some(sibling);
-        //     }
-        // }
-        AppMessage::Restore => state.panes.restore(),
-        AppMessage::Maximize(pane) => state.panes.maximize(pane),
+        AppMessage::PaneClicked(pane) => {
+            state.focus = Some(pane);
+            Task::none()
+        }
+        AppMessage::Restore => {
+            state.panes.restore();
+            Task::none()
+        }
+        AppMessage::Maximize(pane) => {
+            state.panes.maximize(pane);
+            Task::none()
+        }
         AppMessage::TogglePin(pane) => {
             if let Some(Pane { is_pinned, .. }) = state.panes.get_mut(pane) {
                 *is_pinned = !*is_pinned;
             }
+            Task::none()
+        }
+        AppMessage::ResourceDeleted(res_id) => {
+            let task1 = materials_page::update(
+                &mut state.materials_state,
+                &mut state.project,
+                MaterialsMessage::ResourceDeleted(res_id),
+            );
+            let task2 = personnel_page::update(
+                &mut state.personnel_state,
+                &mut state.project,
+                PersonnelMessage::ResourceDeleted(res_id),
+            );
+
+            Task::batch([task1, task2])
         }
     }
 }

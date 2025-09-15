@@ -1,6 +1,6 @@
 use core::panic;
 use iced::{
-    Element,
+    Element, Task,
     widget::{Column, Row, button},
 };
 use planter_core::{
@@ -9,6 +9,8 @@ use planter_core::{
     resources::Resource,
 };
 use std::str::FromStr;
+
+use crate::AppMessage;
 
 use super::components::{data_cell::data_cell, data_label::data_label};
 
@@ -46,9 +48,14 @@ pub enum PersonnelMessage {
     UpdateNewSurname(String),
     CreateNewPersonnel,
     DeletePersonnel(usize, usize),
+    ResourceDeleted(usize),
 }
 
-pub fn update(state: &mut PersonnelState, project: &mut Project, message: PersonnelMessage) {
+pub fn update(
+    state: &mut PersonnelState,
+    project: &mut Project,
+    message: PersonnelMessage,
+) -> Task<AppMessage> {
     match message {
         PersonnelMessage::UpdateName(i, res_id, n) => {
             match project.resource_mut(res_id).unwrap() {
@@ -58,6 +65,7 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
                 _ => panic!(),
             }
             state.repr[i].first_name = n;
+            Task::none()
         }
         PersonnelMessage::UpdateSurname(i, res_id, s) => {
             match project.resource_mut(res_id).unwrap() {
@@ -67,7 +75,8 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
                 _ => panic!(),
             }
 
-            state.repr[i].last_name = s
+            state.repr[i].last_name = s;
+            Task::none()
         }
         PersonnelMessage::UpdateEmail(i, res_id, e) => {
             match project.resource_mut(res_id).unwrap() {
@@ -85,6 +94,7 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
                 _ => panic!(),
             }
             state.repr[i].email = e;
+            Task::none()
         }
         PersonnelMessage::UpdatePhoneNumber(i, res_id, p) => {
             match project.resource_mut(res_id).unwrap() {
@@ -102,12 +112,19 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
                 _ => panic!(),
             }
             state.repr[i].phone_number = p;
+            Task::none()
         }
-        PersonnelMessage::UpdateNewName(n) => state.new_person_name = n,
-        PersonnelMessage::UpdateNewSurname(n) => state.new_person_surname = n,
+        PersonnelMessage::UpdateNewName(n) => {
+            state.new_person_name = n;
+            Task::none()
+        }
+        PersonnelMessage::UpdateNewSurname(n) => {
+            state.new_person_surname = n;
+            Task::none()
+        }
         PersonnelMessage::CreateNewPersonnel => {
             if state.new_person_name.is_empty() || state.new_person_surname.is_empty() {
-                return;
+                return Task::none();
             }
             if let Some(person) = Person::new(&state.new_person_name, &state.new_person_surname) {
                 let personnel = Resource::Personnel {
@@ -127,10 +144,12 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
             } else {
                 state.is_new_name_err = true;
             }
+            Task::none()
         }
         PersonnelMessage::DeletePersonnel(i, res_id) => {
             project.rm_resource(res_id);
             state.repr.remove(i);
+            Task::perform(async move { res_id }, AppMessage::ResourceDeleted)
         }
         PersonnelMessage::UpdateHourlyRate(i, res_id, r) => {
             if let Ok(amount) = r.parse::<f32>() {
@@ -147,6 +166,15 @@ pub fn update(state: &mut PersonnelState, project: &mut Project, message: Person
                 state.repr[i].hourly_rate = r;
                 state.repr[i].is_rate_err = false;
             }
+            Task::none()
+        }
+        PersonnelMessage::ResourceDeleted(res_id) => {
+            state.repr.iter_mut().for_each(|r| {
+                if r.res_id > res_id {
+                    r.res_id = r.res_id - 1;
+                }
+            });
+            Task::none()
         }
     }
 }
