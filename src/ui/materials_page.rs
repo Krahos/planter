@@ -52,26 +52,26 @@ struct NonConsumableRepr {
     is_rate_err: bool,
 }
 
-impl Into<NonConsumableRepr> for ConsumableRepr {
-    fn into(self) -> NonConsumableRepr {
+impl From<ConsumableRepr> for NonConsumableRepr {
+    fn from(val: ConsumableRepr) -> Self {
         NonConsumableRepr {
-            res_id: self.res_id,
-            name: self.name,
-            quantity: self.quantity,
-            is_quantity_err: self.is_quantity_err,
+            res_id: val.res_id,
+            name: val.name,
+            quantity: val.quantity,
+            is_quantity_err: val.is_quantity_err,
             hourly_rate: "".to_owned(),
             is_rate_err: false,
         }
     }
 }
 
-impl Into<ConsumableRepr> for NonConsumableRepr {
-    fn into(self) -> ConsumableRepr {
+impl From<NonConsumableRepr> for ConsumableRepr {
+    fn from(val: NonConsumableRepr) -> Self {
         ConsumableRepr {
-            res_id: self.res_id,
-            name: self.name,
-            quantity: self.quantity,
-            is_quantity_err: self.is_quantity_err,
+            res_id: val.res_id,
+            name: val.name,
+            quantity: val.quantity,
+            is_quantity_err: val.is_quantity_err,
             cost_per_unit: "".to_owned(),
             is_cost_err: false,
         }

@@ -171,7 +171,7 @@ pub fn update(
         PersonnelMessage::ResourceDeleted(res_id) => {
             state.repr.iter_mut().for_each(|r| {
                 if r.res_id > res_id {
-                    r.res_id = r.res_id - 1;
+                    r.res_id -= 1;
                 }
             });
             Task::none()
