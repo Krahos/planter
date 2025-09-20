@@ -14,7 +14,7 @@ edition = "2024"
 chrono = "0.4.42"
 iced = {features = ["advanced", "lazy"], version = "0.14.0-dev"}
 once_cell = "1.21.3"
-planter-core = "0.0.3"
+planter-core = "0.0.4"
 # planter-core = {path = "../planter-core"}
 regex = "1.11.2"
 

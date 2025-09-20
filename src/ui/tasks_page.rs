@@ -77,8 +77,13 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
             project.task_mut(i).unwrap().toggle_completed();
         }
         TasksMessage::UpdateStart(i, s) => {
-            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT) {
-                project.task_mut(i).unwrap().edit_start(date.and_utc());
+            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT)
+                && project
+                    .task_mut(i)
+                    .unwrap()
+                    .edit_start(date.and_utc())
+                    .is_ok()
+            {
                 update_start_finish_duration(state, project, i);
             } else {
                 state.repr[i].is_start_err = true;
@@ -86,8 +91,13 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
             state.repr[i].start = s;
         }
         TasksMessage::UpdateFinish(i, s) => {
-            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT) {
-                project.task_mut(i).unwrap().edit_finish(date.and_utc());
+            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT)
+                && project
+                    .task_mut(i)
+                    .unwrap()
+                    .edit_finish(date.and_utc())
+                    .is_ok()
+            {
                 update_start_finish_duration(state, project, i);
             } else {
                 state.repr[i].is_finish_err = true;
@@ -267,9 +277,11 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
         Some(
             s.split(';')
                 .map(|index_s| {
-                    index_s.parse::<usize>().unwrap_or_else(|_| panic!(
+                    index_s.parse::<usize>().unwrap_or_else(|_| {
+                        panic!(
                         "It should have been possible to parse {index_s} as usize. This is a bug."
-                    ))
+                    )
+                    })
                 })
                 .collect(),
         )
