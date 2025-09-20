@@ -60,6 +60,8 @@ impl Default for TasksState {
     }
 }
 
+const DATE_FORMAT: &str = "%Y-%m-%d %H:%M";
+
 pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessage) {
     match message {
         TasksMessage::UpdateName(i, n) => {
@@ -75,26 +77,28 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
             project.task_mut(i).unwrap().toggle_completed();
         }
         TasksMessage::UpdateStart(i, s) => {
-            if let Ok(date) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M") {
-                project.task_mut(i).unwrap().edit_start(date.and_utc());
-                if let Some(duration) = project.task_mut(i).unwrap().duration() {
-                    state.repr[i].duration = duration.to_string();
-                    state.repr[i].duration = format!("{} hour(s)", duration.num_hours());
-                }
-                state.repr[i].is_start_err = false;
+            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT)
+                && project
+                    .task_mut(i)
+                    .unwrap()
+                    .edit_start(date.and_utc())
+                    .is_ok()
+            {
+                update_start_finish_duration(state, project, i);
             } else {
                 state.repr[i].is_start_err = true;
             }
             state.repr[i].start = s;
         }
         TasksMessage::UpdateFinish(i, s) => {
-            if let Ok(date) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M") {
-                project.task_mut(i).unwrap().edit_finish(date.and_utc());
-                if let Some(duration) = project.task_mut(i).unwrap().duration() {
-                    state.repr[i].duration = format!("{} hour(s)", duration.num_hours());
-                }
-
-                state.repr[i].is_finish_err = false;
+            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT)
+                && project
+                    .task_mut(i)
+                    .unwrap()
+                    .edit_finish(date.and_utc())
+                    .is_ok()
+            {
+                update_start_finish_duration(state, project, i);
             } else {
                 state.repr[i].is_finish_err = true;
             }
@@ -103,7 +107,7 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
         TasksMessage::UpdateDuration(i, d) => {
             if let Ok(duration) = PositiveDuration::parse_from_str(&d) {
                 project.task_mut(i).unwrap().edit_duration(duration);
-                state.repr[i].is_duration_err = false;
+                update_start_finish_duration(state, project, i);
             } else {
                 state.repr[i].is_duration_err = true;
             }
@@ -183,6 +187,23 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
     }
 }
 
+fn update_start_finish_duration(state: &mut TasksState, project: &Project, task_index: usize) {
+    let task = project.task(task_index).unwrap();
+
+    if let Some(start) = task.start() {
+        state.repr[task_index].start = start.naive_local().format(DATE_FORMAT).to_string();
+        state.repr[task_index].is_start_err = false;
+    }
+    if let Some(finish) = task.finish() {
+        state.repr[task_index].finish = finish.naive_local().format(DATE_FORMAT).to_string();
+        state.repr[task_index].is_finish_err = false;
+    }
+    if let Some(duration) = task.duration() {
+        state.repr[task_index].duration = format!("{} h", duration.num_hours());
+        state.repr[task_index].is_duration_err = false;
+    }
+}
+
 fn update_repr(state: &mut TasksState, project: &mut Project) {
     state.repr.clear();
 
@@ -256,9 +277,11 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
         Some(
             s.split(';')
                 .map(|index_s| {
-                    index_s.parse::<usize>().unwrap_or_else(|_| panic!(
+                    index_s.parse::<usize>().unwrap_or_else(|_| {
+                        panic!(
                         "It should have been possible to parse {index_s} as usize. This is a bug."
-                    ))
+                    )
+                    })
                 })
                 .collect(),
         )
