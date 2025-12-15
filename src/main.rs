@@ -1,5 +1,5 @@
 use iced::{
-    Color, Element, Length, Task,
+    Element, Length, Task,
     widget::{
         PaneGrid, button,
         pane_grid::{self, DragEvent},
@@ -7,11 +7,13 @@ use iced::{
     },
 };
 use planter_core::project::Project;
-use ui::{personnel_page, tasks_page};
+use ui::{gantt_page, personnel_page, tasks_page};
 
 use crate::ui::{
+    gantt_page::{GanttMessage, GanttState},
     materials_page::{self, MaterialsMessage, MaterialsState},
     personnel_page::{PersonnelMessage, PersonnelState},
+    style::{PADDING_MD, SPACING_SM, THEME},
     tasks_page::{TasksMessage, TasksState},
 };
 
@@ -26,6 +28,7 @@ struct Appstate {
     tasks_state: TasksState,
     personnel_state: PersonnelState,
     materials_state: MaterialsState,
+    gantt_state: GanttState,
     panes: pane_grid::State<Pane>,
     focus: Option<pane_grid::Pane>,
 }
@@ -36,6 +39,7 @@ enum PaneType {
     Tasks,
     Personnel,
     Materials,
+    Gantt,
 }
 
 #[derive(Clone, Debug)]
@@ -46,6 +50,7 @@ enum AppMessage {
     TasksMessage(TasksMessage),
     PersonnelMessage(PersonnelMessage),
     MaterialsMessage(MaterialsMessage),
+    GanttMessage(GanttMessage),
     ResourceDeleted(usize),
     // Close(pane_grid::Pane),
     Restore,
@@ -85,6 +90,10 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
             &mut state.project,
             materials_message,
         ),
+        AppMessage::GanttMessage(gantt_message) => {
+            gantt_page::update(&mut state.gantt_state, &mut state.project, gantt_message);
+            Task::none()
+        }
         AppMessage::PaneClicked(pane) => {
             state.focus = Some(pane);
             Task::none()
@@ -140,13 +149,17 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
                 "Materials",
                 materials_page::view(&app_state.materials_state).map(AppMessage::from),
             ),
+            PaneType::Gantt => (
+                "Gantt",
+                gantt_page::view(&app_state.project).map(AppMessage::from),
+            ),
         };
         let title = row![text(title).color(if is_focused {
-            PANE_ID_COLOR_FOCUSED
+            THEME.primary
         } else {
-            PANE_ID_COLOR_UNFOCUSED
+            THEME.text_muted
         }),]
-        .spacing(5);
+        .spacing(SPACING_SM);
 
         let title_bar = pane_grid::TitleBar::new(title)
             .controls(pane_grid::Controls::new(view_controls(
@@ -185,22 +198,32 @@ impl Appstate {
             is_pinned: false,
             pane_type: PaneType::Tasks,
         });
+        let tasks_pane = pane;
         if let Some((pane, _)) = panes.split(
-            pane_grid::Axis::Vertical,
-            pane,
+            pane_grid::Axis::Horizontal,
+            tasks_pane,
             Pane {
                 is_pinned: false,
-                pane_type: PaneType::Personnel,
+                pane_type: PaneType::Gantt,
             },
         ) {
-            panes.split(
-                pane_grid::Axis::Horizontal,
+            if let Some((pane, _)) = panes.split(
+                pane_grid::Axis::Vertical,
                 pane,
                 Pane {
                     is_pinned: false,
-                    pane_type: PaneType::Materials,
+                    pane_type: PaneType::Personnel,
                 },
-            );
+            ) {
+                panes.split(
+                    pane_grid::Axis::Horizontal,
+                    pane,
+                    Pane {
+                        is_pinned: false,
+                        pane_type: PaneType::Materials,
+                    },
+                );
+            }
         }
 
         Appstate {
@@ -209,6 +232,7 @@ impl Appstate {
             tasks_state: TasksState::default(),
             personnel_state: PersonnelState::default(),
             materials_state: MaterialsState::default(),
+            gantt_state: GanttState::default(),
             focus: None,
         }
     }
@@ -238,16 +262,11 @@ impl From<MaterialsMessage> for AppMessage {
     }
 }
 
-const PANE_ID_COLOR_UNFOCUSED: Color = Color::from_rgb(
-    0xFF as f32 / 255.0,
-    0xC7 as f32 / 255.0,
-    0xC7 as f32 / 255.0,
-);
-const PANE_ID_COLOR_FOCUSED: Color = Color::from_rgb(
-    0xFF as f32 / 255.0,
-    0x47 as f32 / 255.0,
-    0x47 as f32 / 255.0,
-);
+impl From<GanttMessage> for AppMessage {
+    fn from(value: GanttMessage) -> Self {
+        AppMessage::GanttMessage(value)
+    }
+}
 
 fn view_controls<'a>(
     pane: pane_grid::Pane,
@@ -257,7 +276,7 @@ fn view_controls<'a>(
 ) -> Element<'a, AppMessage> {
     let pin = button(text(if is_pinned { "Unpin" } else { "Pin" }).size(14))
         .on_press(AppMessage::TogglePin(pane))
-        .padding(3);
+        .padding(PADDING_MD);
 
     let maximize = if total_panes > 1 {
         let (content, message) = if is_maximized {
@@ -268,73 +287,57 @@ fn view_controls<'a>(
 
         Some(
             button(text(content).size(14))
-                .style(button::secondary)
-                .padding(3)
+                .padding(PADDING_MD)
                 .on_press(message),
         )
     } else {
         None
     };
 
-    // let close = button(text("Close").size(14))
-    //     .style(button::danger)
-    //     .padding(3)
-    //     .on_press_maybe(if total_panes > 1 && !is_pinned {
-    //         Some(AppMessage::Close(pane))
-    //     } else {
-    //         None
-    //     });
-
-    row![pin, maximize].spacing(5).into()
+    row![pin, maximize].spacing(SPACING_SM).into()
 }
 
 mod style {
     use iced::widget::container;
     use iced::{Border, Theme};
 
-    pub fn title_bar_active(theme: &Theme) -> container::Style {
-        let palette = theme.extended_palette();
+    use crate::ui::style::{BORDER_RADIUS_LG, BORDER_WIDTH_THICK, BORDER_WIDTH_THIN, THEME};
 
+    pub fn title_bar_active(_theme: &Theme) -> container::Style {
         container::Style {
-            text_color: Some(palette.background.strong.text),
-            background: Some(palette.background.strong.color.into()),
+            text_color: Some(THEME.text),
+            background: Some(THEME.background_alt.into()),
             ..Default::default()
         }
     }
 
-    pub fn title_bar_focused(theme: &Theme) -> container::Style {
-        let palette = theme.extended_palette();
-
+    pub fn title_bar_focused(_theme: &Theme) -> container::Style {
         container::Style {
-            text_color: Some(palette.primary.strong.text),
-            background: Some(palette.primary.strong.color.into()),
+            text_color: Some(THEME.background),
+            background: Some(THEME.primary.into()),
             ..Default::default()
         }
     }
 
-    pub fn pane_active(theme: &Theme) -> container::Style {
-        let palette = theme.extended_palette();
-
+    pub fn pane_active(_theme: &Theme) -> container::Style {
         container::Style {
-            background: Some(palette.background.weak.color.into()),
+            background: Some(THEME.background.into()),
             border: Border {
-                width: 2.0,
-                color: palette.background.strong.color,
-                ..Border::default()
+                width: BORDER_WIDTH_THIN,
+                color: THEME.text_muted.scale_alpha(0.3),
+                radius: BORDER_RADIUS_LG.into(),
             },
             ..Default::default()
         }
     }
 
-    pub fn pane_focused(theme: &Theme) -> container::Style {
-        let palette = theme.extended_palette();
-
+    pub fn pane_focused(_theme: &Theme) -> container::Style {
         container::Style {
-            background: Some(palette.background.weak.color.into()),
+            background: Some(THEME.background.into()),
             border: Border {
-                width: 2.0,
-                color: palette.primary.strong.color,
-                ..Border::default()
+                width: BORDER_WIDTH_THICK,
+                color: THEME.primary,
+                radius: BORDER_RADIUS_LG.into(),
             },
             ..Default::default()
         }

@@ -10,6 +10,8 @@ use regex::bytes::Regex;
 
 use super::components::data_cell::data_cell;
 use super::components::data_label::data_label;
+use super::constants::WIDTH;
+use super::style::{PADDING_MD, SPACING_SM, SPACING_XS};
 
 #[derive(Debug)]
 pub struct TasksState {
@@ -292,6 +294,7 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
 
 pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
     let headers = Row::new()
+        .spacing(SPACING_SM)
         .push(data_label("Task ID"))
         .push(data_label("Name"))
         .push(data_label("Description"))
@@ -301,7 +304,8 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .push(data_label("Duration"))
         .push(data_label("Predecessors"))
         .push(data_label("Successors"))
-        .push(data_label("Resources"));
+        .push(data_label("Resources"))
+        .push(data_label("Delete"));
 
     let content_rows: Vec<Element<'_, _>> = state
         .repr
@@ -309,6 +313,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .enumerate()
         .map(|(i, r)| {
             Row::new()
+                .spacing(SPACING_SM)
                 // Index
                 .push(data_label(i))
                 // Name
@@ -327,7 +332,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                         checkbox("", r.completed)
                             .on_toggle(move |_| TasksMessage::ToggleCompleted(i)),
                     )
-                    .width(100)
+                    .width(WIDTH)
                     .height(50)
                     .align_x(Horizontal::Center)
                     .align_y(Vertical::Center),
@@ -366,13 +371,14 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                 .push(
                     button("Del")
                         .on_press(TasksMessage::DeleteTask(i))
-                        .width(100),
+                        .width(WIDTH),
                 )
                 .into()
         })
         .collect();
 
     let new_row = Row::new()
+        .spacing(SPACING_SM)
         // Index
         .push(data_label(""))
         // Name
@@ -387,7 +393,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .push(
             container(checkbox("", false))
                 .height(30)
-                .width(100)
+                .width(WIDTH)
                 .align_x(Horizontal::Center)
                 .align_y(Vertical::Center),
         )
@@ -402,12 +408,16 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         // Successors
         .push(data_cell("", "", false))
         // Resources
-        .push(data_cell("", "", false));
+        .push(data_cell("", "", false))
+        // Delete (empty placeholder)
+        .push(data_label(""));
 
     Column::new()
         .push(headers)
         .extend(content_rows)
         .push(new_row)
+        .spacing(SPACING_XS)
+        .padding(PADDING_MD)
         .height(Length::Shrink)
         .into()
 }

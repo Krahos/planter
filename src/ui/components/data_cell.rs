@@ -5,7 +5,9 @@ use iced::{
     widget::{TextInput, text_input},
 };
 
-use crate::ui::constants::WIDTH;
+use crate::ui::style::{
+    BORDER_RADIUS_SM, BORDER_WIDTH_THIN, CELL_WIDTH as WIDTH, PADDING_SM, THEME,
+};
 
 pub fn data_cell<'a, Message>(
     placeholder: impl Display,
@@ -17,17 +19,22 @@ where
 {
     text_input(&placeholder.to_string(), &value.to_string())
         .align_x(Alignment::Center)
-        .style(move |theme: &iced::Theme, status| text_input::Style {
+        .padding(PADDING_SM)
+        .style(move |_theme: &iced::Theme, _status| text_input::Style {
+            background: THEME.background_alt.into(),
             border: iced::Border {
                 color: if !is_error {
-                    theme.palette().primary
+                    THEME.text.scale_alpha(0.3)
                 } else {
-                    theme.extended_palette().danger.base.color
+                    THEME.error
                 },
-                radius: 0.0.into(),
-                width: 1.0,
+                radius: BORDER_RADIUS_SM.into(),
+                width: BORDER_WIDTH_THIN,
             },
-            ..text_input::default(theme, status)
+            icon: THEME.text,
+            placeholder: THEME.text.scale_alpha(0.4),
+            value: THEME.text,
+            selection: THEME.text.scale_alpha(0.3),
         })
         .width(WIDTH)
 }
