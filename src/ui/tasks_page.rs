@@ -324,8 +324,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                 // Completed
                 .push(
                     container(
-                        checkbox("", r.completed)
-                            .on_toggle(move |_| TasksMessage::ToggleCompleted(i)),
+                        checkbox(r.completed).on_toggle(move |_| TasksMessage::ToggleCompleted(i)),
                     )
                     .width(100)
                     .height(50)
@@ -385,7 +384,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .push(data_cell("", "", false))
         // Completed
         .push(
-            container(checkbox("", false))
+            container(checkbox(false))
                 .height(30)
                 .width(100)
                 .align_x(Horizontal::Center)
