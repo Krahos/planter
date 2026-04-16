@@ -1,12 +1,12 @@
 use iced::{
     Color, Element, Length, Task,
     widget::{
-        Column, PaneGrid, button,
+        Column, PaneGrid, button, container,
         pane_grid::{self, DragEvent},
         row, scrollable, text,
     },
 };
-use iced_aw::{MenuBar, menu::Item};
+use iced_aw::{Menu, MenuBar, menu, menu_items};
 use planter_core::project::Project;
 use ui::{personnel_page, tasks_page};
 
@@ -125,7 +125,10 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
     let focus = app_state.focus;
     let total_panes = app_state.panes.len();
 
-    let menu = MenuBar::new(vec![Item::new(text("test"))]);
+    let view_menu =
+        Menu::new(menu_items!((button("Personnel")), (button("Materials")))).width(Length::Shrink);
+
+    let menu = MenuBar::new(menu_items!((container(text("View")), view_menu)));
 
     let pane_grid = PaneGrid::new(&app_state.panes, |id, pane, is_maximized| {
         let is_focused = focus == Some(id);
