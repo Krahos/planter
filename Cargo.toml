@@ -17,6 +17,7 @@ once_cell = "1.21.4"
 planter-core = "0.0.4"
 # planter-core = {path = "../planter-core"}
 regex = "1.12.3"
+iced_aw = { version = "0.13.0", features = ["full"] }
 
 [patch.crates-io]
 iced = { git = "https://github.com/iced-rs/iced.git"}
