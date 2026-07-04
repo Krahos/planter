@@ -256,7 +256,7 @@ pub fn update(
         }
         MaterialsMessage::DeleteMaterial(i, res_id) => {
             state.repr.remove(i);
-            project.rm_resource(res_id);
+            let _ = project.rm_resource(res_id);
             Task::perform(async move { res_id }, AppMessage::ResourceDeleted)
         }
         MaterialsMessage::ResourceDeleted(res_id) => {
@@ -305,7 +305,7 @@ pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
                     data_cell("20", &consumable.cost_per_unit, consumable.is_cost_err)
                         .on_input(move |c| MaterialsMessage::UpdateCost(i, consumable.res_id, c)),
                 )
-                .push(Space::new(constants::WIDTH, constants::HEIGHT))
+                .push(Space::new().width(constants::WIDTH).height(constants::HEIGHT))
                 .into(),
             Repr::NonConsumable(non_consumable) => Row::new()
                 .push(data_label(non_consumable.res_id))

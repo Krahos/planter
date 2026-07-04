@@ -126,7 +126,7 @@ pub fn update(
             if state.new_person_name.is_empty() || state.new_person_surname.is_empty() {
                 return Task::none();
             }
-            if let Some(person) = Person::new(&state.new_person_name, &state.new_person_surname) {
+            if let Ok(person) = Person::new(&state.new_person_name, &state.new_person_surname) {
                 let personnel = Resource::Personnel {
                     person,
                     hourly_rate: None,
@@ -147,7 +147,7 @@ pub fn update(
             Task::none()
         }
         PersonnelMessage::DeletePersonnel(i, res_id) => {
-            project.rm_resource(res_id);
+            let _ = project.rm_resource(res_id);
             state.repr.remove(i);
             Task::perform(async move { res_id }, AppMessage::ResourceDeleted)
         }
