@@ -220,13 +220,13 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
         TasksMessage::OutdentTask(i) => {
             let id = task_id_at(state, i);
             remove_relationships_with_ancestors(&mut *project, id);
-            if let Some(parent_id) = project.parent_of(id) {
+            if let Some(parent_id) = project.task_parent(id) {
                 let _ = project.remove_subtask(id);
                 // Move the task right after its former parent in the task order
                 // so it appears immediately after the parent's subtree.
                 project.move_task_after(id, parent_id);
                 // Promote one level: if the parent has a parent, become its child instead.
-                if let Some(grandparent_id) = project.parent_of(parent_id) {
+                if let Some(grandparent_id) = project.task_parent(parent_id) {
                     let _ = project.add_subtask(grandparent_id, id);
                 }
             }
@@ -273,7 +273,7 @@ fn update_start_finish_duration(state: &mut TasksState, project: &Project, task_
 fn dfs_order(state: &mut TasksState, project: &Project, task_order: &[Uuid]) {
     let roots: Vec<Uuid> = task_order
         .iter()
-        .filter(|&&id| project.parent_of(id).is_none())
+        .filter(|&&id| project.task_parent(id).is_none())
         .copied()
         .collect();
 
@@ -293,12 +293,12 @@ fn dfs_order(state: &mut TasksState, project: &Project, task_order: &[Uuid]) {
 
         let mut depth = 0usize;
         let mut ancestor = id;
-        while let Some(parent) = project.parent_of(ancestor) {
+        while let Some(parent) = project.task_parent(ancestor) {
             depth += 1;
             ancestor = parent;
         }
 
-        let parent_idx = project.parent_of(id).and_then(|pid| id_to_idx.get(&pid).copied());
+        let parent_idx = project.task_parent(id).and_then(|pid| id_to_idx.get(&pid).copied());
 
         let outline = i.to_string();
 
@@ -414,7 +414,7 @@ fn task_id_at(state: &TasksState, idx: usize) -> Uuid {
 }
 
 fn remove_relationships_with_ancestors(project: &mut Project, mut id: Uuid) {
-    while let Some(ancestor) = project.parent_of(id) {
+    while let Some(ancestor) = project.task_parent(id) {
         let _ = project.rm_time_relationship(ancestor, id);
         let _ = project.rm_time_relationship(id, ancestor);
         id = ancestor;
@@ -423,8 +423,8 @@ fn remove_relationships_with_ancestors(project: &mut Project, mut id: Uuid) {
 
 fn sync_dates_upward(state: &mut TasksState, project: &mut Project, child_id: Uuid) {
     let mut current = child_id;
-    while let Some(parent_id) = project.parent_of(current) {
-        project.sync_parent_dates(parent_id);
+    while let Some(parent_id) = project.task_parent(current) {
+        let _ = project.sync_parent_dates(parent_id);
         if let Some(idx) = state.repr.iter().position(|r| r.id == parent_id) {
             update_start_finish_duration(state, project, idx);
         }

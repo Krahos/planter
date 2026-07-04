@@ -2607,7 +2607,9 @@ dependencies = [
 
 [[package]]
 name = "planter-core"
-version = "0.0.4"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6aadd7e4a28cb163c73f870ecc5b6b5394cb2a1a41fb30877caf7e7015224806"
 dependencies = [
  "anyhow",
  "bon",
@@ -4601,18 +4603,3 @@ dependencies = [
  "syn",
  "winnow",
 ]
-
-[[patch.unused]]
-name = "iced"
-version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced.git#7c6ce8789c4671db81a3920d06e87ab6d8edef1d"
-
-[[patch.unused]]
-name = "iced_core"
-version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced.git#7c6ce8789c4671db81a3920d06e87ab6d8edef1d"
-
-[[patch.unused]]
-name = "iced_widget"
-version = "0.15.0-dev"
-source = "git+https://github.com/iced-rs/iced.git#7c6ce8789c4671db81a3920d06e87ab6d8edef1d"
