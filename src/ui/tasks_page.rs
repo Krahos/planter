@@ -3,6 +3,7 @@ use iced::alignment::{Horizontal, Vertical};
 use iced::font::Family;
 use iced::widget::{Column, Row, button, checkbox, container, text};
 use iced::{Element, Font, Length};
+use iced_aw::ContextMenu;
 use once_cell::sync::Lazy;
 use planter_core::duration::NonNegativeDuration;
 use planter_core::project::{Project, RelDir, TimeRelationship};
@@ -59,6 +60,9 @@ pub enum TasksMessage {
     DeleteTask(usize),
     IndentTask(usize),
     OutdentTask(usize),
+    InsertAbove(usize),
+    InsertBelow(usize),
+    AddChildTask(usize),
 }
 
 impl Default for TasksState {
@@ -216,11 +220,31 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
             remove_relationships_with_ancestors(&mut *project, id);
             if let Some(parent_id) = project.parent_of(id) {
                 let _ = project.remove_subtask(id);
+                // Move the task right after its former parent in the task order
+                // so it appears immediately after the parent's subtree.
+                project.move_task_after(id, parent_id);
                 // Promote one level: if the parent has a parent, become its child instead.
                 if let Some(grandparent_id) = project.parent_of(parent_id) {
                     let _ = project.add_subtask(grandparent_id, id);
                 }
             }
+            update_repr(state, project);
+        }
+        TasksMessage::InsertAbove(i) => {
+            let sibling_id = task_id_at(state, i);
+            project.add_sibling_before(Task::new(""), sibling_id);
+            update_repr(state, project);
+        }
+        TasksMessage::InsertBelow(i) => {
+            let sibling_id = task_id_at(state, i);
+            project.add_sibling_after(Task::new(""), sibling_id);
+            update_repr(state, project);
+        }
+        TasksMessage::AddChildTask(i) => {
+            let parent_id = task_id_at(state, i);
+            let child_id = project.add_task(Task::new(""));
+            // `add_subtask` handles cycle detection — brand-new task can't cycle.
+            let _ = project.add_subtask(parent_id, child_id);
             update_repr(state, project);
         }
     }
@@ -447,7 +471,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            Row::new()
+            let row = Row::new()
                 // WBS outline number
                 .push(data_label(&r.outline))
                 // Name (indented with tree lines)
@@ -511,35 +535,49 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                     data_cell("", &r.resources, false)
                         .on_input(move |res| TasksMessage::UpdateResources(i, res)),
                 )
-                // Indent / Outdent
-                .push(
-                    if i > 0 {
-                        button("→")
+                ;
+
+            let depth = r.depth;
+            ContextMenu::new(row, move || -> Element<'_, TasksMessage> {
+                let mut items: Vec<Element<'_, TasksMessage>> = vec![
+                    button("Insert Above")
+                        .on_press(TasksMessage::InsertAbove(i))
+                        .width(140)
+                        .into(),
+                    button("Insert Below")
+                        .on_press(TasksMessage::InsertBelow(i))
+                        .width(140)
+                        .into(),
+                    button("Add Child")
+                        .on_press(TasksMessage::AddChildTask(i))
+                        .width(140)
+                        .into(),
+                ];
+                if i > 0 {
+                    items.push(
+                        button("→ Indent")
                             .on_press(TasksMessage::IndentTask(i))
-                            .width(30)
-                            .padding(0)
-                    } else {
-                        button("→").width(30).padding(0)
-                    },
-                )
-                .push(
-                    if r.depth > 0 {
-                        button("←")
+                            .width(140)
+                            .into(),
+                    );
+                }
+                if depth > 0 {
+                    items.push(
+                        button("← Outdent")
                             .on_press(TasksMessage::OutdentTask(i))
-                            .width(30)
-                            .padding(0)
-                    } else {
-                        button("←").width(30).padding(0)
-                    },
-                )
-                // Delete
-                .push(
-                    button("Del")
+                            .width(140)
+                            .into(),
+                    );
+                }
+                items.push(
+                    button("Delete")
                         .on_press(TasksMessage::DeleteTask(i))
-                        .width(80)
-                        .padding(0),
-                )
-                .into()
+                        .width(140)
+                        .into(),
+                );
+                Column::with_children(items).spacing(1).into()
+            })
+            .into()
         })
         .collect();
 

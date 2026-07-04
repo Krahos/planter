@@ -3,6 +3,7 @@ use iced::{
     Element, Task,
     widget::{Column, Row, button},
 };
+use iced_aw::ContextMenu;
 use planter_core::{
     person::{EmailAddress, Person, PhoneNumber},
     project::Project,
@@ -10,9 +11,12 @@ use planter_core::{
 };
 use std::str::FromStr;
 
-use crate::AppMessage;
+use crate::{AppMessage, ui::constants};
 
-use super::components::{data_cell::data_cell, data_label::data_label};
+use super::components::{
+    data_cell::data_cell,
+    data_label::data_label,
+};
 
 #[derive(Debug, Default)]
 pub struct PersonnelState {
@@ -193,7 +197,8 @@ pub fn view(state: &PersonnelState) -> Element<'_, PersonnelMessage> {
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            Row::new()
+            let res_id = r.res_id;
+            let row = Row::new()
                 .push(data_label(r.res_id))
                 .push(
                     data_cell("Sebastiano", &r.first_name, false)
@@ -214,14 +219,19 @@ pub fn view(state: &PersonnelState) -> Element<'_, PersonnelMessage> {
                 .push(
                     data_cell("50.00", &r.hourly_rate, false)
                         .on_input(move |h| PersonnelMessage::UpdateHourlyRate(i, r.res_id, h)),
-                )
-                .push(
-                    button("Del")
-                        .on_press(PersonnelMessage::DeletePersonnel(i, r.res_id))
-                        .width(100)
-                        .height(50),
-                )
+                );
+
+            ContextMenu::new(row, move || -> Element<'_, PersonnelMessage> {
+                Column::with_children(vec![
+                    button("Delete")
+                        .on_press(PersonnelMessage::DeletePersonnel(i, res_id))
+                        .width(constants::CONTEXT_MENU_WIDTH)
+                        .into(),
+                ])
+                .spacing(constants::CONTEXT_MENU_SPACING)
                 .into()
+            })
+            .into()
         })
         .collect();
 
