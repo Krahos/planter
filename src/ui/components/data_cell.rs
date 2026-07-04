@@ -17,6 +17,7 @@ where
 {
     text_input(&placeholder.to_string(), &value.to_string())
         .align_x(Alignment::Center)
+        .padding(0)
         .style(move |theme: &iced::Theme, status| text_input::Style {
             border: iced::Border {
                 color: if !is_error {

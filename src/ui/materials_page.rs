@@ -2,8 +2,9 @@ use std::fmt::Display;
 
 use iced::{
     Element, Length, Task,
-    widget::{Column, Row, Space, button, pick_list},
+    widget::{Column, Row, button, pick_list},
 };
+use iced_aw::ContextMenu;
 use planter_core::{
     project::Project,
     resources::{Material, NonConsumable, Resource},
@@ -256,7 +257,7 @@ pub fn update(
         }
         MaterialsMessage::DeleteMaterial(i, res_id) => {
             state.repr.remove(i);
-            project.rm_resource(res_id);
+            let _ = project.rm_resource(res_id);
             Task::perform(async move { res_id }, AppMessage::ResourceDeleted)
         }
         MaterialsMessage::ResourceDeleted(res_id) => {
@@ -284,66 +285,92 @@ pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
         .iter()
         .enumerate()
         .map(|(i, r)| match r {
-            Repr::Consumable(consumable) => Row::new()
-                .push(data_label(consumable.res_id))
-                .push(
-                    data_cell("Stimpack", &consumable.name, false)
-                        .on_input(move |n| MaterialsMessage::UpdateName(i, consumable.res_id, n)),
-                )
-                .push(
-                    pick_list(options, Some(Selection::Consumable), move |s| {
-                        MaterialsMessage::Typeselected(i, consumable.res_id, s)
-                    })
-                    .width(constants::WIDTH),
-                )
-                .push(
-                    data_cell("1", &consumable.quantity, consumable.is_quantity_err).on_input(
-                        move |q| MaterialsMessage::UpdateQuantity(i, consumable.res_id, q),
-                    ),
-                )
-                .push(
-                    data_cell("20", &consumable.cost_per_unit, consumable.is_cost_err)
-                        .on_input(move |c| MaterialsMessage::UpdateCost(i, consumable.res_id, c)),
-                )
-                .push(Space::new(constants::WIDTH, constants::HEIGHT))
-                .into(),
-            Repr::NonConsumable(non_consumable) => Row::new()
-                .push(data_label(non_consumable.res_id))
-                .push(
-                    data_cell("Crowbar", &non_consumable.name, false).on_input(move |n| {
-                        MaterialsMessage::UpdateName(i, non_consumable.res_id, n)
-                    }),
-                )
-                .push(
-                    pick_list(options, Some(Selection::NonConsumable), move |s| {
-                        MaterialsMessage::Typeselected(i, non_consumable.res_id, s)
-                    })
-                    .width(constants::WIDTH),
-                )
-                .push(
-                    data_cell(
-                        "1",
-                        &non_consumable.quantity,
-                        non_consumable.is_quantity_err,
+            Repr::Consumable(consumable) => {
+                let res_id = consumable.res_id;
+                let row = Row::new()
+                    .push(data_label(consumable.res_id))
+                    .push(
+                        data_cell("Stimpack", &consumable.name, false).on_input(move |n| {
+                            MaterialsMessage::UpdateName(i, consumable.res_id, n)
+                        }),
                     )
-                    .on_input(move |q| {
-                        MaterialsMessage::UpdateQuantity(i, non_consumable.res_id, q)
-                    }),
-                )
-                .push(
-                    data_cell(
-                        "20",
-                        &non_consumable.hourly_rate,
-                        non_consumable.is_rate_err,
-                    )
-                    .on_input(move |c| MaterialsMessage::UpdateCost(i, non_consumable.res_id, c)),
-                )
-                .push(
-                    button("Del")
-                        .on_press(MaterialsMessage::DeleteMaterial(i, non_consumable.res_id))
+                    .push(
+                        pick_list(options, Some(Selection::Consumable), move |s| {
+                            MaterialsMessage::Typeselected(i, consumable.res_id, s)
+                        })
                         .width(constants::WIDTH),
-                )
-                .into(),
+                    )
+                    .push(
+                        data_cell("1", &consumable.quantity, consumable.is_quantity_err).on_input(
+                            move |q| MaterialsMessage::UpdateQuantity(i, consumable.res_id, q),
+                        ),
+                    )
+                    .push(
+                        data_cell("20", &consumable.cost_per_unit, consumable.is_cost_err)
+                            .on_input(move |c| {
+                                MaterialsMessage::UpdateCost(i, consumable.res_id, c)
+                            }),
+                    );
+
+                ContextMenu::new(row, move || -> Element<'_, MaterialsMessage> {
+                    Column::with_children(vec![
+                        button("Delete")
+                            .on_press(MaterialsMessage::DeleteMaterial(i, res_id))
+                            .width(constants::CONTEXT_MENU_WIDTH)
+                            .into(),
+                    ])
+                    .spacing(constants::CONTEXT_MENU_SPACING)
+                    .into()
+                })
+                .into()
+            }
+            Repr::NonConsumable(non_consumable) => {
+                let res_id = non_consumable.res_id;
+                let row =
+                    Row::new()
+                        .push(data_label(non_consumable.res_id))
+                        .push(data_cell("Crowbar", &non_consumable.name, false).on_input(
+                            move |n| MaterialsMessage::UpdateName(i, non_consumable.res_id, n),
+                        ))
+                        .push(
+                            pick_list(options, Some(Selection::NonConsumable), move |s| {
+                                MaterialsMessage::Typeselected(i, non_consumable.res_id, s)
+                            })
+                            .width(constants::WIDTH),
+                        )
+                        .push(
+                            data_cell(
+                                "1",
+                                &non_consumable.quantity,
+                                non_consumable.is_quantity_err,
+                            )
+                            .on_input(move |q| {
+                                MaterialsMessage::UpdateQuantity(i, non_consumable.res_id, q)
+                            }),
+                        )
+                        .push(
+                            data_cell(
+                                "20",
+                                &non_consumable.hourly_rate,
+                                non_consumable.is_rate_err,
+                            )
+                            .on_input(move |c| {
+                                MaterialsMessage::UpdateCost(i, non_consumable.res_id, c)
+                            }),
+                        );
+
+                ContextMenu::new(row, move || -> Element<'_, MaterialsMessage> {
+                    Column::with_children(vec![
+                        button("Delete")
+                            .on_press(MaterialsMessage::DeleteMaterial(i, res_id))
+                            .width(constants::CONTEXT_MENU_WIDTH)
+                            .into(),
+                    ])
+                    .spacing(constants::CONTEXT_MENU_SPACING)
+                    .into()
+                })
+                .into()
+            }
         })
         .collect();
 
