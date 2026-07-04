@@ -13,10 +13,7 @@ use std::str::FromStr;
 
 use crate::{AppMessage, ui::constants};
 
-use super::components::{
-    data_cell::data_cell,
-    data_label::data_label,
-};
+use super::components::{data_cell::data_cell, data_label::data_label};
 
 #[derive(Debug, Default)]
 pub struct PersonnelState {

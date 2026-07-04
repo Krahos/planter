@@ -5,10 +5,10 @@ use iced::widget::{Column, Row, button, checkbox, container, text};
 use iced::{Element, Font, Length};
 use iced_aw::ContextMenu;
 use once_cell::sync::Lazy;
+use planter_core::Uuid;
 use planter_core::duration::NonNegativeDuration;
 use planter_core::project::{Project, RelDir, TimeRelationship};
 use planter_core::task::Task;
-use planter_core::Uuid;
 use regex::bytes::Regex;
 use std::collections::HashMap;
 
@@ -98,7 +98,12 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
         TasksMessage::UpdateStart(i, s) => {
             if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT) {
                 let id = task_id_at(state, i);
-                if project.task_mut(id).unwrap().edit_start(date.and_utc()).is_ok() {
+                if project
+                    .task_mut(id)
+                    .unwrap()
+                    .edit_start(date.and_utc())
+                    .is_ok()
+                {
                     update_start_finish_duration(state, project, i);
                     sync_dates_upward(state, project, id);
                 } else {
@@ -112,7 +117,12 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
         TasksMessage::UpdateFinish(i, s) => {
             if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT) {
                 let id = task_id_at(state, i);
-                if project.task_mut(id).unwrap().edit_finish(date.and_utc()).is_ok() {
+                if project
+                    .task_mut(id)
+                    .unwrap()
+                    .edit_finish(date.and_utc())
+                    .is_ok()
+                {
                     update_start_finish_duration(state, project, i);
                     sync_dates_upward(state, project, id);
                 } else {
@@ -142,8 +152,16 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
                 if indices.iter().any(|&idx| idx >= state.repr.len()) {
                     true
                 } else {
-                    let ids: Vec<Uuid> = indices.iter().map(|&idx| task_id_at(state, idx)).collect();
-                    project.update_relationships(id, &ids, RelDir::Predecessors, TimeRelationship::FinishToStart).is_err()
+                    let ids: Vec<Uuid> =
+                        indices.iter().map(|&idx| task_id_at(state, idx)).collect();
+                    project
+                        .update_relationships(
+                            id,
+                            &ids,
+                            RelDir::Predecessors,
+                            TimeRelationship::FinishToStart,
+                        )
+                        .is_err()
                 }
             } else {
                 true
@@ -151,7 +169,12 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
 
             if is_failure {
                 project
-                    .update_relationships(id, &[], RelDir::Predecessors, TimeRelationship::FinishToStart)
+                    .update_relationships(
+                        id,
+                        &[],
+                        RelDir::Predecessors,
+                        TimeRelationship::FinishToStart,
+                    )
                     .expect("It should have been possible to remove predecessors. This is a bug.");
             }
 
@@ -169,15 +192,28 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
                 if indices.iter().any(|&idx| idx >= state.repr.len()) {
                     true
                 } else {
-                    let ids: Vec<Uuid> = indices.iter().map(|&idx| task_id_at(state, idx)).collect();
-                    project.update_relationships(id, &ids, RelDir::Successors, TimeRelationship::FinishToStart).is_err()
+                    let ids: Vec<Uuid> =
+                        indices.iter().map(|&idx| task_id_at(state, idx)).collect();
+                    project
+                        .update_relationships(
+                            id,
+                            &ids,
+                            RelDir::Successors,
+                            TimeRelationship::FinishToStart,
+                        )
+                        .is_err()
                 }
             } else {
                 true
             };
             if is_failure {
                 project
-                    .update_relationships(id, &[], RelDir::Successors, TimeRelationship::FinishToStart)
+                    .update_relationships(
+                        id,
+                        &[],
+                        RelDir::Successors,
+                        TimeRelationship::FinishToStart,
+                    )
                     .expect("It should have been possible to remove successors. This is a bug.");
             }
 
@@ -298,7 +334,9 @@ fn dfs_order(state: &mut TasksState, project: &Project, task_order: &[Uuid]) {
             ancestor = parent;
         }
 
-        let parent_idx = project.task_parent(id).and_then(|pid| id_to_idx.get(&pid).copied());
+        let parent_idx = project
+            .task_parent(id)
+            .and_then(|pid| id_to_idx.get(&pid).copied());
 
         let outline = i.to_string();
 
@@ -322,9 +360,15 @@ fn dfs_order(state: &mut TasksState, project: &Project, task_order: &[Uuid]) {
             name: task.name().to_owned(),
             description: task.description().map(|d| d.to_owned()).unwrap_or_default(),
             completed: task.completed(),
-            start: task.start().map(|s| s.naive_local().format(DATE_FORMAT).to_string()).unwrap_or_default(),
+            start: task
+                .start()
+                .map(|s| s.naive_local().format(DATE_FORMAT).to_string())
+                .unwrap_or_default(),
             is_start_err: false,
-            finish: task.finish().map(|f| f.naive_local().format(DATE_FORMAT).to_string()).unwrap_or_default(),
+            finish: task
+                .finish()
+                .map(|f| f.naive_local().format(DATE_FORMAT).to_string())
+                .unwrap_or_default(),
             is_finish_err: false,
             duration: task.duration().map(|d| d.to_string()).unwrap_or_default(),
             is_duration_err: false,
@@ -340,7 +384,12 @@ fn dfs_order(state: &mut TasksState, project: &Project, task_order: &[Uuid]) {
 fn dfs_visit(id: Uuid, project: &Project, task_order: &[Uuid], order: &mut Vec<Uuid>) {
     order.push(id);
     let mut children: Vec<Uuid> = project.subtasks(id).collect();
-    children.sort_by_key(|child| task_order.iter().position(|&t| t == *child).unwrap_or(usize::MAX));
+    children.sort_by_key(|child| {
+        task_order
+            .iter()
+            .position(|&t| t == *child)
+            .unwrap_or(usize::MAX)
+    });
     for child in children {
         dfs_visit(child, project, task_order, order);
     }
@@ -374,7 +423,9 @@ fn update_repr(state: &mut TasksState, project: &mut Project) {
 
         // Check for sibling after this task (same parent).
         let has_sibling = match state.repr[i].parent_idx {
-            Some(pid) => state.repr[i + 1..].iter().any(|r| r.parent_idx == Some(pid)),
+            Some(pid) => state.repr[i + 1..]
+                .iter()
+                .any(|r| r.parent_idx == Some(pid)),
             None => false,
         };
 
@@ -383,8 +434,17 @@ fn update_repr(state: &mut TasksState, project: &mut Project) {
     }
 }
 
-fn update_predecessors_repr(state: &mut TasksState, project: &mut Project, predecessor_ids: &[Uuid]) {
-    let id_to_idx: HashMap<Uuid, usize> = state.repr.iter().enumerate().map(|(i, r)| (r.id, i)).collect();
+fn update_predecessors_repr(
+    state: &mut TasksState,
+    project: &mut Project,
+    predecessor_ids: &[Uuid],
+) {
+    let id_to_idx: HashMap<Uuid, usize> = state
+        .repr
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.id, i))
+        .collect();
     for &pred_id in predecessor_ids {
         if let Some(&idx) = id_to_idx.get(&pred_id) {
             state.repr[idx].successors = project
@@ -397,7 +457,12 @@ fn update_predecessors_repr(state: &mut TasksState, project: &mut Project, prede
 }
 
 fn update_successors_repr(state: &mut TasksState, project: &mut Project, successor_ids: &[Uuid]) {
-    let id_to_idx: HashMap<Uuid, usize> = state.repr.iter().enumerate().map(|(i, r)| (r.id, i)).collect();
+    let id_to_idx: HashMap<Uuid, usize> = state
+        .repr
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.id, i))
+        .collect();
     for &succ_id in successor_ids {
         if let Some(&idx) = id_to_idx.get(&succ_id) {
             state.repr[idx].predecessors = project
@@ -482,12 +547,10 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                 // Name (indented with tree lines)
                 .push(
                     Row::new()
-                        .push(
-                            text(&r.prefix).font(Font {
-                                family: Family::Monospace,
-                                ..Default::default()
-                            }),
-                        )
+                        .push(text(&r.prefix).font(Font {
+                            family: Family::Monospace,
+                            ..Default::default()
+                        }))
                         .push(
                             data_cell(format!("Task n{i}"), &r.name, false)
                                 .on_input(move |n| TasksMessage::UpdateName(i, n))
@@ -503,7 +566,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                 // Completed
                 .push(
                     container(
-                        checkbox( r.completed)
+                        checkbox(r.completed)
                             .on_toggle(move |_| TasksMessage::ToggleCompleted(i))
                             .size(16),
                     )
@@ -541,8 +604,7 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                 .push(
                     data_cell("", &r.resources, false)
                         .on_input(move |res| TasksMessage::UpdateResources(i, res)),
-                )
-                ;
+                );
 
             let depth = r.depth;
             ContextMenu::new(row, move || -> Element<'_, TasksMessage> {
@@ -606,14 +668,11 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .push(data_cell("", "", false))
         // Completed
         .push(
-            container(
-                checkbox(false)
-                    .size(16),
-            )
-            .height(20)
-            .width(100)
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Center),
+            container(checkbox(false).size(16))
+                .height(20)
+                .width(100)
+                .align_x(Horizontal::Center)
+                .align_y(Vertical::Center),
         )
         // Start
         .push(data_cell("", "", false))

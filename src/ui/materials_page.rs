@@ -12,10 +12,7 @@ use planter_core::{
 
 use crate::{AppMessage, ui::constants};
 
-use super::components::{
-    data_cell::data_cell,
-    data_label::data_label,
-};
+use super::components::{data_cell::data_cell, data_label::data_label};
 
 #[derive(Debug, Default)]
 pub struct MaterialsState {
@@ -293,8 +290,9 @@ pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
                 let row = Row::new()
                     .push(data_label(consumable.res_id))
                     .push(
-                        data_cell("Stimpack", &consumable.name, false)
-                            .on_input(move |n| MaterialsMessage::UpdateName(i, consumable.res_id, n)),
+                        data_cell("Stimpack", &consumable.name, false).on_input(move |n| {
+                            MaterialsMessage::UpdateName(i, consumable.res_id, n)
+                        }),
                     )
                     .push(
                         pick_list(options, Some(Selection::Consumable), move |s| {
@@ -309,7 +307,9 @@ pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
                     )
                     .push(
                         data_cell("20", &consumable.cost_per_unit, consumable.is_cost_err)
-                            .on_input(move |c| MaterialsMessage::UpdateCost(i, consumable.res_id, c)),
+                            .on_input(move |c| {
+                                MaterialsMessage::UpdateCost(i, consumable.res_id, c)
+                            }),
                     );
 
                 ContextMenu::new(row, move || -> Element<'_, MaterialsMessage> {
@@ -326,37 +326,38 @@ pub fn view(state: &MaterialsState) -> Element<'_, MaterialsMessage> {
             }
             Repr::NonConsumable(non_consumable) => {
                 let res_id = non_consumable.res_id;
-                let row = Row::new()
-                    .push(data_label(non_consumable.res_id))
-                    .push(
-                        data_cell("Crowbar", &non_consumable.name, false).on_input(move |n| {
-                            MaterialsMessage::UpdateName(i, non_consumable.res_id, n)
-                        }),
-                    )
-                    .push(
-                        pick_list(options, Some(Selection::NonConsumable), move |s| {
-                            MaterialsMessage::Typeselected(i, non_consumable.res_id, s)
-                        })
-                        .width(constants::WIDTH),
-                    )
-                    .push(
-                        data_cell(
-                            "1",
-                            &non_consumable.quantity,
-                            non_consumable.is_quantity_err,
+                let row =
+                    Row::new()
+                        .push(data_label(non_consumable.res_id))
+                        .push(data_cell("Crowbar", &non_consumable.name, false).on_input(
+                            move |n| MaterialsMessage::UpdateName(i, non_consumable.res_id, n),
+                        ))
+                        .push(
+                            pick_list(options, Some(Selection::NonConsumable), move |s| {
+                                MaterialsMessage::Typeselected(i, non_consumable.res_id, s)
+                            })
+                            .width(constants::WIDTH),
                         )
-                        .on_input(move |q| {
-                            MaterialsMessage::UpdateQuantity(i, non_consumable.res_id, q)
-                        }),
-                    )
-                    .push(
-                        data_cell(
-                            "20",
-                            &non_consumable.hourly_rate,
-                            non_consumable.is_rate_err,
+                        .push(
+                            data_cell(
+                                "1",
+                                &non_consumable.quantity,
+                                non_consumable.is_quantity_err,
+                            )
+                            .on_input(move |q| {
+                                MaterialsMessage::UpdateQuantity(i, non_consumable.res_id, q)
+                            }),
                         )
-                        .on_input(move |c| MaterialsMessage::UpdateCost(i, non_consumable.res_id, c)),
-                    );
+                        .push(
+                            data_cell(
+                                "20",
+                                &non_consumable.hourly_rate,
+                                non_consumable.is_rate_err,
+                            )
+                            .on_input(move |c| {
+                                MaterialsMessage::UpdateCost(i, non_consumable.res_id, c)
+                            }),
+                        );
 
                 ContextMenu::new(row, move || -> Element<'_, MaterialsMessage> {
                     Column::with_children(vec![
