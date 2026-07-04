@@ -12,6 +12,8 @@ use planter_core::Uuid;
 use regex::bytes::Regex;
 use std::collections::HashMap;
 
+use crate::ui::constants;
+
 use super::components::data_cell::data_cell;
 use super::components::data_label::data_label;
 
@@ -367,7 +369,7 @@ fn update_repr(state: &mut TasksState, project: &mut Project) {
                 let nxt = i + 1 + offset;
                 state.repr[nxt].depth == level + 1
             });
-            prefix.push_str(if continues { "│   " } else { "    " });
+            prefix.push_str(if continues { "│" } else { " " });
         }
 
         // Check for sibling after this task (same parent).
@@ -376,7 +378,7 @@ fn update_repr(state: &mut TasksState, project: &mut Project) {
             None => false,
         };
 
-        prefix.push_str(if has_sibling { "├── " } else { "└── " });
+        prefix.push_str(if has_sibling { "├" } else { "└" });
         state.repr[i].prefix = prefix;
     }
 }
@@ -454,9 +456,12 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
 }
 
 pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
+    let max_depth = state.repr.iter().map(|r| r.depth).max().unwrap_or(0);
+    let name_width = constants::WIDTH + max_depth as u32 * constants::INDENT_WIDTH;
+
     let headers = Row::new()
         .push(data_label("Task ID"))
-        .push(data_label("Name"))
+        .push(data_label("Name").width(name_width))
         .push(data_label("Description"))
         .push(data_label("Completed"))
         .push(data_label("Start"))
@@ -485,8 +490,10 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                         )
                         .push(
                             data_cell(format!("Task n{i}"), &r.name, false)
-                                .on_input(move |n| TasksMessage::UpdateName(i, n)),
-                        ),
+                                .on_input(move |n| TasksMessage::UpdateName(i, n))
+                                .width(Length::Fill),
+                        )
+                        .width(name_width),
                 )
                 // Description
                 .push(
@@ -586,9 +593,14 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .push(data_label(""))
         // Name
         .push(
-            data_cell("New task name", &state.new_task, false)
-                .on_input(TasksMessage::UpdateNewTask)
-                .on_submit(TasksMessage::CreateNewTask),
+            Row::new()
+                .push(
+                    data_cell("New task name", &state.new_task, false)
+                        .on_input(TasksMessage::UpdateNewTask)
+                        .on_submit(TasksMessage::CreateNewTask)
+                        .width(Length::Fill),
+                )
+                .width(name_width),
         )
         // Description
         .push(data_cell("", "", false))
