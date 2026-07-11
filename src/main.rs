@@ -1,12 +1,15 @@
 use iced::{
     Color, Element, Length, Task,
     widget::{
-        Column, PaneGrid, button, container,
-        pane_grid::{self, DragEvent},
+        Column, PaneGrid, button, checkbox, container,
+        pane_grid::{self, Axis::Vertical, DragEvent},
         row, scrollable, text,
     },
 };
-use iced_aw::{menu_items, menu::{Menu, MenuBar}};
+use iced_aw::{
+    menu::{Menu, MenuBar},
+    menu_items,
+};
 use planter_core::project::Project;
 use ui::{personnel_page, tasks_page};
 
@@ -31,7 +34,7 @@ struct Appstate {
     focus: Option<pane_grid::Pane>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum PaneType {
     #[default]
     Tasks,
@@ -48,15 +51,13 @@ enum AppMessage {
     PersonnelMessage(PersonnelMessage),
     MaterialsMessage(MaterialsMessage),
     ResourceDeleted(usize),
-    // Close(pane_grid::Pane),
+    TogglePaneVisibility(PaneType),
     Restore,
     Maximize(pane_grid::Pane),
-    TogglePin(pane_grid::Pane),
 }
 
 #[derive(Default)]
 struct Pane {
-    is_pinned: bool,
     pane_type: PaneType,
 }
 
@@ -98,12 +99,6 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
             state.panes.maximize(pane);
             Task::none()
         }
-        AppMessage::TogglePin(pane) => {
-            if let Some(Pane { is_pinned, .. }) = state.panes.get_mut(pane) {
-                *is_pinned = !*is_pinned;
-            }
-            Task::none()
-        }
         AppMessage::ResourceDeleted(res_id) => {
             let task1 = materials_page::update(
                 &mut state.materials_state,
@@ -118,6 +113,21 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
 
             Task::batch([task1, task2])
         }
+        AppMessage::TogglePaneVisibility(pane_type) => {
+            let pane = state
+                .panes
+                .iter()
+                .find(|(_, p)| p.pane_type == pane_type)
+                .map(|(id, _)| *id);
+            let split_target = state.panes.iter().next().map(|(id, _)| *id);
+
+            if let Some(id) = pane {
+                state.panes.close(id);
+            } else if let Some(id) = split_target {
+                state.panes.split(Vertical, id, Pane { pane_type });
+            }
+            Task::none()
+        }
     }
 }
 
@@ -125,8 +135,22 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
     let focus = app_state.focus;
     let total_panes = app_state.panes.len();
 
-    let view_menu =
-        Menu::new(menu_items!((button("Personnel")), (button("Materials")))).width(Length::Shrink);
+    let checked = |t| app_state.panes.iter().any(|(_, p)| p.pane_type == t);
+    let view_menu = Menu::new(menu_items!(
+        (checkbox(checked(PaneType::Tasks))
+            .label("Tasks")
+            .on_toggle(|_| AppMessage::TogglePaneVisibility(PaneType::Tasks))
+            .width(120)),
+        (checkbox(checked(PaneType::Personnel))
+            .label("Personnel")
+            .on_toggle(|_| AppMessage::TogglePaneVisibility(PaneType::Personnel))
+            .width(120)),
+        (checkbox(checked(PaneType::Materials))
+            .label("Materials")
+            .on_toggle(|_| AppMessage::TogglePaneVisibility(PaneType::Materials))
+            .width(120))
+    ))
+    .width(Length::Shrink);
 
     let menu = MenuBar::new(menu_items!((container(text("View")), view_menu)));
 
@@ -157,8 +181,8 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
         let title_bar = pane_grid::TitleBar::new(title)
             .controls(pane_grid::Controls::new(view_controls(
                 id,
+                pane.pane_type,
                 total_panes,
-                pane.is_pinned,
                 is_maximized,
             )))
             .padding(10)
@@ -189,14 +213,12 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
 impl Appstate {
     fn new() -> Self {
         let (mut panes, pane) = pane_grid::State::new(Pane {
-            is_pinned: false,
             pane_type: PaneType::Tasks,
         });
         if let Some((pane, _)) = panes.split(
             pane_grid::Axis::Vertical,
             pane,
             Pane {
-                is_pinned: false,
                 pane_type: PaneType::Personnel,
             },
         ) {
@@ -204,7 +226,6 @@ impl Appstate {
                 pane_grid::Axis::Horizontal,
                 pane,
                 Pane {
-                    is_pinned: false,
                     pane_type: PaneType::Materials,
                 },
             );
@@ -258,14 +279,10 @@ const PANE_ID_COLOR_FOCUSED: Color = Color::from_rgb(
 
 fn view_controls<'a>(
     pane: pane_grid::Pane,
+    pane_type: PaneType,
     total_panes: usize,
-    is_pinned: bool,
     is_maximized: bool,
 ) -> Element<'a, AppMessage> {
-    let pin = button(text(if is_pinned { "Unpin" } else { "Pin" }).size(14))
-        .on_press(AppMessage::TogglePin(pane))
-        .padding(3);
-
     let maximize = if total_panes > 1 {
         let (content, message) = if is_maximized {
             ("Restore", AppMessage::Restore)
@@ -283,16 +300,14 @@ fn view_controls<'a>(
         None
     };
 
-    // let close = button(text("Close").size(14))
-    //     .style(button::danger)
-    //     .padding(3)
-    //     .on_press_maybe(if total_panes > 1 && !is_pinned {
-    //         Some(AppMessage::Close(pane))
-    //     } else {
-    //         None
-    //     });
+    let close = (total_panes > 1).then(|| {
+        button(text("✕").size(14))
+            .style(button::danger)
+            .padding(3)
+            .on_press(AppMessage::TogglePaneVisibility(pane_type))
+    });
 
-    row![pin, maximize].spacing(5).into()
+    row![maximize, close].spacing(5).into()
 }
 
 mod style {
