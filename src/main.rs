@@ -6,7 +6,7 @@ use iced::{
         row, scrollable, text,
     },
 };
-use iced_aw::{Menu, MenuBar, menu, menu_items};
+use iced_aw::{menu_items, menu::{Menu, MenuBar}};
 use planter_core::project::Project;
 use ui::{personnel_page, tasks_page};
 

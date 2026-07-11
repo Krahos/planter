@@ -1,12 +1,18 @@
 use chrono::NaiveDateTime;
 use iced::alignment::{Horizontal, Vertical};
-use iced::widget::{Column, Row, button, checkbox, container};
-use iced::{Element, Length};
+use iced::font::Family;
+use iced::widget::{Column, Row, button, checkbox, container, text};
+use iced::{Element, Font, Length};
+use iced_aw::ContextMenu;
 use once_cell::sync::Lazy;
-use planter_core::duration::PositiveDuration;
-use planter_core::project::Project;
+use planter_core::Uuid;
+use planter_core::duration::NonNegativeDuration;
+use planter_core::project::{Project, RelDir, TimeRelationship};
 use planter_core::task::Task;
 use regex::bytes::Regex;
+use std::collections::HashMap;
+
+use crate::ui::constants;
 
 use super::components::data_cell::data_cell;
 use super::components::data_label::data_label;
@@ -19,6 +25,11 @@ pub struct TasksState {
 
 #[derive(Debug, Default)]
 struct Repr {
+    id: Uuid,
+    outline: String,
+    prefix: String,
+    depth: usize,
+    parent_idx: Option<usize>,
     name: String,
     description: String,
     completed: bool,
@@ -49,6 +60,11 @@ pub enum TasksMessage {
     UpdateNewTask(String),
     CreateNewTask,
     DeleteTask(usize),
+    IndentTask(usize),
+    OutdentTask(usize),
+    InsertAbove(usize),
+    InsertBelow(usize),
+    AddChildTask(usize),
 }
 
 impl Default for TasksState {
@@ -66,48 +82,63 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
     match message {
         TasksMessage::UpdateName(i, n) => {
             state.repr[i].name = n.clone();
-            project.task_mut(i).unwrap().edit_name(n);
+            let id = task_id_at(state, i);
+            project.task_mut(id).unwrap().edit_name(n);
         }
         TasksMessage::UpdateDescription(i, d) => {
             state.repr[i].description = d.clone();
-            project.task_mut(i).unwrap().edit_description(d);
+            let id = task_id_at(state, i);
+            project.task_mut(id).unwrap().edit_description(d);
         }
         TasksMessage::ToggleCompleted(i) => {
             state.repr[i].completed = !state.repr[i].completed;
-            project.task_mut(i).unwrap().toggle_completed();
+            let id = task_id_at(state, i);
+            project.task_mut(id).unwrap().toggle_completed();
         }
         TasksMessage::UpdateStart(i, s) => {
-            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT)
-                && project
-                    .task_mut(i)
+            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT) {
+                let id = task_id_at(state, i);
+                if project
+                    .task_mut(id)
                     .unwrap()
                     .edit_start(date.and_utc())
                     .is_ok()
-            {
-                update_start_finish_duration(state, project, i);
+                {
+                    update_start_finish_duration(state, project, i);
+                    sync_dates_upward(state, project, id);
+                } else {
+                    state.repr[i].is_start_err = true;
+                }
             } else {
                 state.repr[i].is_start_err = true;
             }
             state.repr[i].start = s;
         }
         TasksMessage::UpdateFinish(i, s) => {
-            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT)
-                && project
-                    .task_mut(i)
+            if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT) {
+                let id = task_id_at(state, i);
+                if project
+                    .task_mut(id)
                     .unwrap()
                     .edit_finish(date.and_utc())
                     .is_ok()
-            {
-                update_start_finish_duration(state, project, i);
+                {
+                    update_start_finish_duration(state, project, i);
+                    sync_dates_upward(state, project, id);
+                } else {
+                    state.repr[i].is_finish_err = true;
+                }
             } else {
                 state.repr[i].is_finish_err = true;
             }
             state.repr[i].finish = s;
         }
         TasksMessage::UpdateDuration(i, d) => {
-            if let Ok(duration) = PositiveDuration::parse_from_str(&d) {
-                project.task_mut(i).unwrap().edit_duration(duration);
+            if let Ok(duration) = NonNegativeDuration::parse_from_str(&d) {
+                let id = task_id_at(state, i);
+                project.task_mut(id).unwrap().edit_duration(duration);
                 update_start_finish_duration(state, project, i);
+                sync_dates_upward(state, project, id);
             } else {
                 state.repr[i].is_duration_err = true;
             }
@@ -115,55 +146,80 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
         }
         TasksMessage::UpdateResources(_i, _s) => {}
         TasksMessage::UpdatePredecessors(i, p) => {
-            let predecessors = project.predecessors_indices(i).collect::<Vec<usize>>();
+            let id = task_id_at(state, i);
+            let old_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
             let is_failure = if let Some(indices) = parse_indices(&p) {
-                project.update_predecessors(i, &indices).is_err()
+                if indices.iter().any(|&idx| idx >= state.repr.len()) {
+                    true
+                } else {
+                    let ids: Vec<Uuid> =
+                        indices.iter().map(|&idx| task_id_at(state, idx)).collect();
+                    project
+                        .update_relationships(
+                            id,
+                            &ids,
+                            RelDir::Predecessors,
+                            TimeRelationship::FinishToStart,
+                        )
+                        .is_err()
+                }
             } else {
                 true
             };
 
             if is_failure {
                 project
-                    .update_predecessors(i, &[])
+                    .update_relationships(
+                        id,
+                        &[],
+                        RelDir::Predecessors,
+                        TimeRelationship::FinishToStart,
+                    )
                     .expect("It should have been possible to remove predecessors. This is a bug.");
             }
 
-            update_predecessors_repr(
-                state,
-                project,
-                &project
-                    .predecessors_indices(i)
-                    .filter(|index| !predecessors.contains(index))
-                    .collect::<Vec<usize>>(),
-            );
-            update_predecessors_repr(state, project, &predecessors);
+            let new_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
+            update_predecessors_repr(state, project, &new_pred_ids);
+            update_predecessors_repr(state, project, &old_pred_ids);
 
             state.repr[i].is_predecessors_err = is_failure;
             state.repr[i].predecessors = p;
         }
         TasksMessage::UpdateSuccessors(i, p) => {
-            let successors = project.successors_indices(i).collect::<Vec<usize>>();
+            let id = task_id_at(state, i);
+            let old_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
             let is_failure = if let Some(indices) = parse_indices(&p) {
-                project.update_successors(i, &indices).is_err()
+                if indices.iter().any(|&idx| idx >= state.repr.len()) {
+                    true
+                } else {
+                    let ids: Vec<Uuid> =
+                        indices.iter().map(|&idx| task_id_at(state, idx)).collect();
+                    project
+                        .update_relationships(
+                            id,
+                            &ids,
+                            RelDir::Successors,
+                            TimeRelationship::FinishToStart,
+                        )
+                        .is_err()
+                }
             } else {
                 true
             };
             if is_failure {
                 project
-                    .update_successors(i, &[])
-                    .expect("It should have been possible to remove predecessors. This is a bug.");
+                    .update_relationships(
+                        id,
+                        &[],
+                        RelDir::Successors,
+                        TimeRelationship::FinishToStart,
+                    )
+                    .expect("It should have been possible to remove successors. This is a bug.");
             }
 
-            // Update old and new successors.
-            update_successors_repr(
-                state,
-                project,
-                &project
-                    .successors_indices(i)
-                    .filter(|index| !successors.contains(index))
-                    .collect::<Vec<usize>>(),
-            );
-            update_successors_repr(state, project, &successors);
+            let new_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
+            update_successors_repr(state, project, &new_succ_ids);
+            update_successors_repr(state, project, &old_succ_ids);
 
             state.repr[i].is_successors_err = is_failure;
             state.repr[i].successors = p;
@@ -171,24 +227,70 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
         TasksMessage::CreateNewTask => {
             let task = Task::new(state.new_task.clone());
             project.add_task(task);
-            state.repr.push(Repr {
-                name: state.new_task.clone(),
-                ..Default::default()
-            });
             state.new_task = "".to_owned();
+            update_repr(state, project);
         }
         TasksMessage::UpdateNewTask(n) => state.new_task = n,
         TasksMessage::DeleteTask(i) => {
+            let id = task_id_at(state, i);
             project
-                .rm_task(i)
+                .rm_task(id)
                 .expect("Should have been possible to remove a task. This is a bug.");
+            update_repr(state, project);
+        }
+        TasksMessage::IndentTask(i) => {
+            if i == 0 {
+                return;
+            }
+            let current_depth = state.repr[i].depth;
+            let parent_idx = (0..i).rev().find(|&j| state.repr[j].depth <= current_depth);
+            if let Some(parent_idx) = parent_idx {
+                let id = task_id_at(state, i);
+                let parent_id = task_id_at(state, parent_idx);
+                let _ = project.add_subtask(parent_id, id);
+                remove_relationships_with_ancestors(&mut *project, id);
+                sync_dates_upward(state, project, id);
+                update_repr(state, project);
+            }
+        }
+        TasksMessage::OutdentTask(i) => {
+            let id = task_id_at(state, i);
+            remove_relationships_with_ancestors(&mut *project, id);
+            if let Some(parent_id) = project.task_parent(id) {
+                let _ = project.remove_subtask(id);
+                // Move the task right after its former parent in the task order
+                // so it appears immediately after the parent's subtree.
+                project.move_task_after(id, parent_id);
+                // Promote one level: if the parent has a parent, become its child instead.
+                if let Some(grandparent_id) = project.task_parent(parent_id) {
+                    let _ = project.add_subtask(grandparent_id, id);
+                }
+            }
+            update_repr(state, project);
+        }
+        TasksMessage::InsertAbove(i) => {
+            let sibling_id = task_id_at(state, i);
+            project.add_sibling_before(Task::new(""), sibling_id);
+            update_repr(state, project);
+        }
+        TasksMessage::InsertBelow(i) => {
+            let sibling_id = task_id_at(state, i);
+            project.add_sibling_after(Task::new(""), sibling_id);
+            update_repr(state, project);
+        }
+        TasksMessage::AddChildTask(i) => {
+            let parent_id = task_id_at(state, i);
+            let child_id = project.add_task(Task::new(""));
+            // `add_subtask` handles cycle detection — brand-new task can't cycle.
+            let _ = project.add_subtask(parent_id, child_id);
             update_repr(state, project);
         }
     }
 }
 
 fn update_start_finish_duration(state: &mut TasksState, project: &Project, task_index: usize) {
-    let task = project.task(task_index).unwrap();
+    let id = task_id_at(state, task_index);
+    let task = project.task(id).unwrap();
 
     if let Some(start) = task.start() {
         state.repr[task_index].start = start.naive_local().format(DATE_FORMAT).to_string();
@@ -204,66 +306,194 @@ fn update_start_finish_duration(state: &mut TasksState, project: &Project, task_
     }
 }
 
-fn update_repr(state: &mut TasksState, project: &mut Project) {
-    state.repr.clear();
+fn dfs_order(state: &mut TasksState, project: &Project, task_order: &[Uuid]) {
+    let roots: Vec<Uuid> = task_order
+        .iter()
+        .filter(|&&id| project.task_parent(id).is_none())
+        .copied()
+        .collect();
 
-    for (i, task) in project.tasks().enumerate() {
+    let mut display_order = Vec::new();
+    for &root in &roots {
+        dfs_visit(root, project, task_order, &mut display_order);
+    }
+
+    let id_to_idx: HashMap<Uuid, usize> = display_order
+        .iter()
+        .enumerate()
+        .map(|(i, &id)| (id, i))
+        .collect();
+
+    for (i, &id) in display_order.iter().enumerate() {
+        let task = project.task(id).unwrap();
+
+        let mut depth = 0usize;
+        let mut ancestor = id;
+        while let Some(parent) = project.task_parent(ancestor) {
+            depth += 1;
+            ancestor = parent;
+        }
+
+        let parent_idx = project
+            .task_parent(id)
+            .and_then(|pid| id_to_idx.get(&pid).copied());
+
+        let outline = i.to_string();
+
+        let predecessors = project
+            .predecessors_ids(id)
+            .filter_map(|p_id| id_to_idx.get(&p_id).map(|p| p.to_string()))
+            .collect::<Vec<String>>()
+            .join(";");
+        let successors = project
+            .successors_ids(id)
+            .filter_map(|s_id| id_to_idx.get(&s_id).map(|s| s.to_string()))
+            .collect::<Vec<String>>()
+            .join(";");
+
         state.repr.push(Repr {
+            id,
+            outline,
+            prefix: String::new(),
+            depth,
+            parent_idx,
             name: task.name().to_owned(),
-            description: task.description().to_owned(),
+            description: task.description().map(|d| d.to_owned()).unwrap_or_default(),
             completed: task.completed(),
-            start: if let Some(start) = task.start() {
-                start.to_string()
-            } else {
-                "".to_owned()
-            },
+            start: task
+                .start()
+                .map(|s| s.naive_local().format(DATE_FORMAT).to_string())
+                .unwrap_or_default(),
             is_start_err: false,
-            finish: if let Some(finish) = task.finish() {
-                finish.to_string()
-            } else {
-                "".to_owned()
-            },
+            finish: task
+                .finish()
+                .map(|f| f.naive_local().format(DATE_FORMAT).to_string())
+                .unwrap_or_default(),
             is_finish_err: false,
-            duration: if let Some(duration) = task.duration() {
-                duration.to_string()
-            } else {
-                "".to_owned()
-            },
+            duration: task.duration().map(|d| d.to_string()).unwrap_or_default(),
             is_duration_err: false,
-            predecessors: project
-                .predecessors_indices(i)
-                .map(|p| p.to_string())
-                .collect::<Vec<String>>()
-                .join(";"),
+            predecessors,
             is_predecessors_err: false,
-            successors: project
-                .successors_indices(i)
-                .map(|p| p.to_string())
-                .collect::<Vec<String>>()
-                .join(";"),
+            successors,
             is_successors_err: false,
             resources: "".to_owned(),
         });
     }
 }
 
-fn update_predecessors_repr(state: &mut TasksState, project: &mut Project, predecessors: &[usize]) {
-    for &predecessor in predecessors {
-        state.repr[predecessor].successors = project
-            .successors_indices(predecessor)
-            .map(|p| p.to_string())
-            .collect::<Vec<String>>()
-            .join(";");
+fn dfs_visit(id: Uuid, project: &Project, task_order: &[Uuid], order: &mut Vec<Uuid>) {
+    order.push(id);
+    let mut children: Vec<Uuid> = project.subtasks(id).collect();
+    children.sort_by_key(|child| {
+        task_order
+            .iter()
+            .position(|&t| t == *child)
+            .unwrap_or(usize::MAX)
+    });
+    for child in children {
+        dfs_visit(child, project, task_order, order);
     }
 }
 
-fn update_successors_repr(state: &mut TasksState, project: &mut Project, successors: &[usize]) {
-    for &successor in successors {
-        state.repr[successor].predecessors = project
-            .predecessors_indices(successor)
-            .map(|p| p.to_string())
-            .collect::<Vec<String>>()
-            .join(";");
+fn update_repr(state: &mut TasksState, project: &mut Project) {
+    state.repr.clear();
+
+    let task_order: Vec<Uuid> = project.tasks().map(|t| t.id()).collect();
+    dfs_order(state, project, &task_order);
+
+    // Second pass: compute tree-line prefixes.
+    for i in 0..state.repr.len() {
+        let depth = state.repr[i].depth;
+        if depth == 0 {
+            continue;
+        }
+
+        let mut prefix = String::new();
+        for level in 0..depth - 1 {
+            // Check if the ancestor at this level has another child below.
+            let next = state.repr[i + 1..]
+                .iter()
+                .position(|r| r.depth <= level + 1);
+            let continues = next.is_some_and(|offset| {
+                let nxt = i + 1 + offset;
+                state.repr[nxt].depth == level + 1
+            });
+            prefix.push_str(if continues { "│" } else { " " });
+        }
+
+        // Check for sibling after this task (same parent).
+        let has_sibling = match state.repr[i].parent_idx {
+            Some(pid) => state.repr[i + 1..]
+                .iter()
+                .any(|r| r.parent_idx == Some(pid)),
+            None => false,
+        };
+
+        prefix.push_str(if has_sibling { "├" } else { "└" });
+        state.repr[i].prefix = prefix;
+    }
+}
+
+fn update_predecessors_repr(
+    state: &mut TasksState,
+    project: &mut Project,
+    predecessor_ids: &[Uuid],
+) {
+    let id_to_idx: HashMap<Uuid, usize> = state
+        .repr
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.id, i))
+        .collect();
+    for &pred_id in predecessor_ids {
+        if let Some(&idx) = id_to_idx.get(&pred_id) {
+            state.repr[idx].successors = project
+                .successors_ids(pred_id)
+                .filter_map(|s_id| id_to_idx.get(&s_id).map(|s| s.to_string()))
+                .collect::<Vec<String>>()
+                .join(";");
+        }
+    }
+}
+
+fn update_successors_repr(state: &mut TasksState, project: &mut Project, successor_ids: &[Uuid]) {
+    let id_to_idx: HashMap<Uuid, usize> = state
+        .repr
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.id, i))
+        .collect();
+    for &succ_id in successor_ids {
+        if let Some(&idx) = id_to_idx.get(&succ_id) {
+            state.repr[idx].predecessors = project
+                .predecessors_ids(succ_id)
+                .filter_map(|p_id| id_to_idx.get(&p_id).map(|p| p.to_string()))
+                .collect::<Vec<String>>()
+                .join(";");
+        }
+    }
+}
+
+fn task_id_at(state: &TasksState, idx: usize) -> Uuid {
+    state.repr[idx].id
+}
+
+fn remove_relationships_with_ancestors(project: &mut Project, mut id: Uuid) {
+    while let Some(ancestor) = project.task_parent(id) {
+        let _ = project.rm_time_relationship(ancestor, id);
+        let _ = project.rm_time_relationship(id, ancestor);
+        id = ancestor;
+    }
+}
+
+fn sync_dates_upward(state: &mut TasksState, project: &mut Project, child_id: Uuid) {
+    let mut current = child_id;
+    while let Some(parent_id) = project.task_parent(current) {
+        let _ = project.sync_parent_dates(parent_id);
+        if let Some(idx) = state.repr.iter().position(|r| r.id == parent_id) {
+            update_start_finish_duration(state, project, idx);
+        }
+        current = parent_id;
     }
 }
 
@@ -291,9 +521,12 @@ fn parse_indices(s: &str) -> Option<Vec<usize>> {
 }
 
 pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
+    let max_depth = state.repr.iter().map(|r| r.depth).max().unwrap_or(0);
+    let name_width = constants::WIDTH + max_depth as u32 * constants::INDENT_WIDTH;
+
     let headers = Row::new()
         .push(data_label("Task ID"))
-        .push(data_label("Name"))
+        .push(data_label("Name").width(name_width))
         .push(data_label("Description"))
         .push(data_label("Completed"))
         .push(data_label("Start"))
@@ -308,13 +541,22 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            Row::new()
-                // Index
-                .push(data_label(i))
-                // Name
+            let row = Row::new()
+                // WBS outline number
+                .push(data_label(&r.outline))
+                // Name (indented with tree lines)
                 .push(
-                    data_cell(format!("Task n{i}"), &r.name, false)
-                        .on_input(move |n| TasksMessage::UpdateName(i, n)),
+                    Row::new()
+                        .push(text(&r.prefix).font(Font {
+                            family: Family::Monospace,
+                            ..Default::default()
+                        }))
+                        .push(
+                            data_cell(format!("Task n{i}"), &r.name, false)
+                                .on_input(move |n| TasksMessage::UpdateName(i, n))
+                                .width(Length::Fill),
+                        )
+                        .width(name_width),
                 )
                 // Description
                 .push(
@@ -324,10 +566,12 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                 // Completed
                 .push(
                     container(
-                        checkbox(r.completed).on_toggle(move |_| TasksMessage::ToggleCompleted(i)),
+                        checkbox(r.completed)
+                            .on_toggle(move |_| TasksMessage::ToggleCompleted(i))
+                            .size(16),
                     )
                     .width(100)
-                    .height(50)
+                    .height(20)
                     .align_x(Horizontal::Center)
                     .align_y(Vertical::Center),
                 )
@@ -360,14 +604,49 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
                 .push(
                     data_cell("", &r.resources, false)
                         .on_input(move |res| TasksMessage::UpdateResources(i, res)),
-                )
-                // Delete
-                .push(
-                    button("Del")
+                );
+
+            let depth = r.depth;
+            ContextMenu::new(row, move || -> Element<'_, TasksMessage> {
+                let mut items: Vec<Element<'_, TasksMessage>> = vec![
+                    button("Insert Above")
+                        .on_press(TasksMessage::InsertAbove(i))
+                        .width(140)
+                        .into(),
+                    button("Insert Below")
+                        .on_press(TasksMessage::InsertBelow(i))
+                        .width(140)
+                        .into(),
+                    button("Add Child")
+                        .on_press(TasksMessage::AddChildTask(i))
+                        .width(140)
+                        .into(),
+                ];
+                if i > 0 {
+                    items.push(
+                        button("→ Indent")
+                            .on_press(TasksMessage::IndentTask(i))
+                            .width(140)
+                            .into(),
+                    );
+                }
+                if depth > 0 {
+                    items.push(
+                        button("← Outdent")
+                            .on_press(TasksMessage::OutdentTask(i))
+                            .width(140)
+                            .into(),
+                    );
+                }
+                items.push(
+                    button("Delete")
                         .on_press(TasksMessage::DeleteTask(i))
-                        .width(100),
-                )
-                .into()
+                        .width(140)
+                        .into(),
+                );
+                Column::with_children(items).spacing(1).into()
+            })
+            .into()
         })
         .collect();
 
@@ -376,16 +655,21 @@ pub fn view(state: &TasksState) -> Element<'_, TasksMessage> {
         .push(data_label(""))
         // Name
         .push(
-            data_cell("New task name", &state.new_task, false)
-                .on_input(TasksMessage::UpdateNewTask)
-                .on_submit(TasksMessage::CreateNewTask),
+            Row::new()
+                .push(
+                    data_cell("New task name", &state.new_task, false)
+                        .on_input(TasksMessage::UpdateNewTask)
+                        .on_submit(TasksMessage::CreateNewTask)
+                        .width(Length::Fill),
+                )
+                .width(name_width),
         )
         // Description
         .push(data_cell("", "", false))
         // Completed
         .push(
-            container(checkbox(false))
-                .height(30)
+            container(checkbox(false).size(16))
+                .height(20)
                 .width(100)
                 .align_x(Horizontal::Center)
                 .align_y(Vertical::Center),
