@@ -6,6 +6,7 @@ use iced::{
         pane_grid::{self, Axis::Vertical, DragEvent},
         row, scrollable, text,
     },
+    Border, Padding, alignment,
 };
 use iced_aw::{
     menu::{Menu, MenuBar},
@@ -23,7 +24,18 @@ use crate::ui::{
 mod ui;
 
 fn main() -> iced::Result {
-    iced::application(Appstate::default, update, view).run()
+    iced::application(Appstate::default, update, view)
+        .title(|state: &Appstate| {
+            let file_label = state
+                .file_path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Untitled".to_string());
+            let dirty_mark = if state.dirty { " *" } else { "" };
+            format!("{file_label}{dirty_mark}")
+        })
+        .run()
 }
 
 struct Appstate {
@@ -276,44 +288,41 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
 fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
     let focus = app_state.focus;
     let total_panes = app_state.panes.len();
-    let file_label = app_state
-        .file_path
-        .as_ref()
-        .and_then(|p| p.file_name())
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "Untitled".to_string());
-    let dirty_mark = if app_state.dirty { " *" } else { "" };
-    let title = format!("{file_label}{dirty_mark}");
 
     let checked = |t| app_state.panes.iter().any(|(_, p)| p.pane_type == t);
     let file_menu = Menu::new(menu_items!(
-        (button("New Project").on_press(AppMessage::NewProject).width(180)),
-        (button("Open...").on_press(AppMessage::OpenFile).width(180)),
-        (button("Save").on_press(AppMessage::SaveFile).width(180)),
-        (button("Save As...").on_press(AppMessage::SaveAsFile).width(180)),
+        (menu_item_button("New Project", AppMessage::NewProject)),
+        (menu_item_button("Open...", AppMessage::OpenFile)),
+        (menu_item_button("Save", AppMessage::SaveFile)),
+        (menu_item_button("Save As...", AppMessage::SaveAsFile)),
     ))
-    .width(Length::Shrink);
+    .spacing(5.0)
+    .offset(15.0)
+    .width(180.0);
 
     let view_menu = Menu::new(menu_items!(
         (checkbox(checked(PaneType::Tasks))
             .label("Tasks")
             .on_toggle(|_| AppMessage::TogglePaneVisibility(PaneType::Tasks))
-            .width(120)),
+            .width(Length::Fill)),
         (checkbox(checked(PaneType::Personnel))
             .label("Personnel")
             .on_toggle(|_| AppMessage::TogglePaneVisibility(PaneType::Personnel))
-            .width(120)),
+            .width(Length::Fill)),
         (checkbox(checked(PaneType::Materials))
             .label("Materials")
             .on_toggle(|_| AppMessage::TogglePaneVisibility(PaneType::Materials))
-            .width(120))
+            .width(Length::Fill)),
     ))
-    .width(Length::Shrink);
+    .spacing(5.0)
+    .offset(15.0)
+    .width(180.0);
 
     let menu = MenuBar::new(menu_items!(
-        (container(text("File")), file_menu),
-        (container(text("View")), view_menu),
-    ));
+        (container(text("File")).padding([4, 12]), file_menu),
+        (container(text("View")).padding([4, 12]), view_menu),
+    ))
+    .padding(Padding::new(5.0));
 
     let pane_grid = PaneGrid::new(&app_state.panes, |id, pane, is_maximized| {
         let is_focused = focus == Some(id);
@@ -370,7 +379,6 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
 
     let mut content = Column::new()
         .push(menu)
-        .push(text(title).size(14))
         .push(pane_grid);
 
     if let Some(error) = &app_state.error {
@@ -458,6 +466,52 @@ const PANE_ID_COLOR_FOCUSED: Color = Color::from_rgb(
     0x47 as f32 / 255.0,
     0x47 as f32 / 255.0,
 );
+
+fn menu_item_button<'a>(
+    label: &'a str,
+    msg: AppMessage,
+) -> button::Button<'a, AppMessage> {
+    button(text(label).width(Length::Fill).align_y(alignment::Vertical::Center))
+        .width(Length::Fill)
+        .padding([4, 8])
+        .style(menu_button_style)
+        .on_press(msg)
+}
+
+fn menu_button_style(
+    theme: &iced::Theme,
+    status: iced::widget::button::Status,
+) -> iced::widget::button::Style {
+    use iced::widget::button::Style;
+    let palette = theme.extended_palette();
+    let base = Style {
+        text_color: palette.background.base.text,
+        border: Border::default().rounded(6.0),
+        ..Style::default()
+    };
+    match status {
+        iced::widget::button::Status::Active => Style {
+            background: None,
+            ..base
+        },
+        iced::widget::button::Status::Hovered => Style {
+            background: Some(
+                Color::from_rgb(
+                    palette.primary.weak.color.r * 1.2,
+                    palette.primary.weak.color.g * 1.2,
+                    palette.primary.weak.color.b * 1.2,
+                )
+                .into(),
+            ),
+            ..base
+        },
+        iced::widget::button::Status::Pressed => Style {
+            background: Some(palette.primary.weak.color.into()),
+            ..base
+        },
+        _ => base,
+    }
+}
 
 fn view_controls<'a>(
     pane: pane_grid::Pane,
