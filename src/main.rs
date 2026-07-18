@@ -1,7 +1,8 @@
+use std::path::PathBuf;
+
 use iced::{
     Color, Element, Length, Task,
-    widget::{
-        Column, PaneGrid, button, checkbox, container,
+    widget::{Column, PaneGrid, button, checkbox, container,
         pane_grid::{self, Axis::Vertical, DragEvent},
         row, scrollable, text,
     },
@@ -27,6 +28,9 @@ fn main() -> iced::Result {
 
 struct Appstate {
     project: Project,
+    file_path: Option<PathBuf>,
+    dirty: bool,
+    error: Option<String>,
     tasks_state: TasksState,
     personnel_state: PersonnelState,
     materials_state: MaterialsState,
@@ -54,6 +58,13 @@ enum AppMessage {
     TogglePaneVisibility(PaneType),
     Restore,
     Maximize(pane_grid::Pane),
+    NewProject,
+    OpenFile,
+    FileOpened(Option<(PathBuf, String)>),
+    SaveFile,
+    SaveAsFile,
+    FileSaved(Option<PathBuf>),
+    DismissError,
 }
 
 #[derive(Default)]
@@ -61,8 +72,127 @@ struct Pane {
     pane_type: PaneType,
 }
 
+fn ensure_planter_ext(path: PathBuf) -> PathBuf {
+    if path.extension().is_some_and(|e| e == "planter") {
+        path
+    } else {
+        path.with_extension("planter")
+    }
+}
+
 fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
     match message {
+        AppMessage::NewProject => {
+            state.project = Project::new("Untitled");
+            state.file_path = None;
+            state.dirty = false;
+            state.error = None;
+            state.tasks_state = TasksState::default();
+            state.personnel_state = PersonnelState::default();
+            state.materials_state = MaterialsState::default();
+            Task::none()
+        }
+        AppMessage::OpenFile => Task::perform(
+            async {
+                let handle = rfd::AsyncFileDialog::new()
+                    .set_title("Open Project")
+                    .add_filter("PlanTer Project", &["planter"])
+                    .pick_file()
+                    .await;
+                match handle {
+                    Some(h) => {
+                        let path = h.path().to_path_buf();
+                        let data = h.read().await;
+                        let content = String::from_utf8(data).ok()?;
+                        Some((path, content))
+                    }
+                    None => None,
+                }
+            },
+            AppMessage::FileOpened,
+        ),
+        AppMessage::FileOpened(Some((path, content))) => {
+            match ron::from_str(&content) {
+                Ok(project) => {
+                    state.project = project;
+                    state.file_path = Some(path);
+                    state.dirty = false;
+                    state.error = None;
+                    tasks_page::reset_project(&mut state.tasks_state, &mut state.project);
+                    personnel_page::reset_project(&mut state.personnel_state, &state.project);
+                    materials_page::reset_project(&mut state.materials_state, &state.project);
+                }
+                Err(e) => {
+                    state.error = Some(format!("Failed to open project: {e}"));
+                }
+            }
+            Task::none()
+        }
+        AppMessage::FileOpened(None) => Task::none(),
+        AppMessage::SaveFile => {
+            if let Some(ref path) = state.file_path {
+                match ron::ser::to_string_pretty(
+                    &state.project,
+                    ron::ser::PrettyConfig::new(),
+                ) {
+                    Ok(data) => match std::fs::write(path, data) {
+                        Ok(_) => {
+                            state.dirty = false;
+                            state.error = None;
+                        }
+                        Err(e) => state.error = Some(format!("Failed to save: {e}")),
+                    },
+                    Err(e) => state.error = Some(format!("Failed to serialize: {e}")),
+                }
+                Task::none()
+            } else {
+                Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .set_title("Save Project")
+                            .add_filter("PlanTer Project", &["planter"])
+                            .save_file()
+                            .await
+                            .map(|h| h.path().to_path_buf())
+                    },
+                    AppMessage::FileSaved,
+                )
+            }
+        }
+        AppMessage::SaveAsFile => Task::perform(
+            async {
+                rfd::AsyncFileDialog::new()
+                    .set_title("Save Project As")
+                    .add_filter("PlanTer Project", &["planter"])
+                    .save_file()
+                    .await
+                    .map(|h| h.path().to_path_buf())
+            },
+            AppMessage::FileSaved,
+        ),
+        AppMessage::FileSaved(Some(path)) => {
+            let path = ensure_planter_ext(path);
+            match ron::ser::to_string_pretty(
+                &state.project,
+                ron::ser::PrettyConfig::new(),
+            ) {
+                Ok(data) => match std::fs::write(&path, data) {
+                    Ok(_) => {
+                        state.file_path = Some(path);
+                        state.dirty = false;
+                        state.error = None;
+                    }
+                    Err(e) => state.error = Some(format!("Failed to save: {e}")),
+                },
+                Err(e) => state.error = Some(format!("Failed to serialize: {e}")),
+            }
+            Task::none()
+        }
+        AppMessage::FileSaved(None) => Task::none(),
+        AppMessage::DismissError => {
+            state.error = None;
+            Task::none()
+        }
         AppMessage::PaneDragged(drag_event) => {
             if let DragEvent::Dropped { pane, target } = drag_event {
                 state.panes.drop(pane, target);
@@ -75,18 +205,25 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
         }
         AppMessage::TasksMessage(tasks_message) => {
             tasks_page::update(&mut state.tasks_state, &mut state.project, tasks_message);
+            state.dirty = true;
             Task::none()
         }
-        AppMessage::PersonnelMessage(personnel_message) => personnel_page::update(
-            &mut state.personnel_state,
-            &mut state.project,
-            personnel_message,
-        ),
-        AppMessage::MaterialsMessage(materials_message) => materials_page::update(
-            &mut state.materials_state,
-            &mut state.project,
-            materials_message,
-        ),
+        AppMessage::PersonnelMessage(personnel_message) => {
+            state.dirty = true;
+            personnel_page::update(
+                &mut state.personnel_state,
+                &mut state.project,
+                personnel_message,
+            )
+        }
+        AppMessage::MaterialsMessage(materials_message) => {
+            state.dirty = true;
+            materials_page::update(
+                &mut state.materials_state,
+                &mut state.project,
+                materials_message,
+            )
+        }
         AppMessage::PaneClicked(pane) => {
             state.focus = Some(pane);
             Task::none()
@@ -100,6 +237,7 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
             Task::none()
         }
         AppMessage::ResourceDeleted(res_id) => {
+            state.dirty = true;
             let task1 = materials_page::update(
                 &mut state.materials_state,
                 &mut state.project,
@@ -119,12 +257,16 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
                 .iter()
                 .find(|(_, p)| p.pane_type == pane_type)
                 .map(|(id, _)| *id);
-            let split_target = state.panes.iter().next().map(|(id, _)| *id);
 
             if let Some(id) = pane {
-                state.panes.close(id);
-            } else if let Some(id) = split_target {
-                state.panes.split(Vertical, id, Pane { pane_type });
+                if state.panes.len() > 1 {
+                    state.panes.close(id);
+                }
+            } else {
+                let split_target = state.panes.iter().next().map(|(id, _)| *id);
+                if let Some(id) = split_target {
+                    state.panes.split(Vertical, id, Pane { pane_type });
+                }
             }
             Task::none()
         }
@@ -134,8 +276,24 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
 fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
     let focus = app_state.focus;
     let total_panes = app_state.panes.len();
+    let file_label = app_state
+        .file_path
+        .as_ref()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Untitled".to_string());
+    let dirty_mark = if app_state.dirty { " *" } else { "" };
+    let title = format!("{file_label}{dirty_mark}");
 
     let checked = |t| app_state.panes.iter().any(|(_, p)| p.pane_type == t);
+    let file_menu = Menu::new(menu_items!(
+        (button("New Project").on_press(AppMessage::NewProject).width(180)),
+        (button("Open...").on_press(AppMessage::OpenFile).width(180)),
+        (button("Save").on_press(AppMessage::SaveFile).width(180)),
+        (button("Save As...").on_press(AppMessage::SaveAsFile).width(180)),
+    ))
+    .width(Length::Shrink);
+
     let view_menu = Menu::new(menu_items!(
         (checkbox(checked(PaneType::Tasks))
             .label("Tasks")
@@ -152,7 +310,10 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
     ))
     .width(Length::Shrink);
 
-    let menu = MenuBar::new(menu_items!((container(text("View")), view_menu)));
+    let menu = MenuBar::new(menu_items!(
+        (container(text("File")), file_menu),
+        (container(text("View")), view_menu),
+    ));
 
     let pane_grid = PaneGrid::new(&app_state.panes, |id, pane, is_maximized| {
         let is_focused = focus == Some(id);
@@ -207,7 +368,25 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
     .on_drag(AppMessage::PaneDragged)
     .on_resize(10, AppMessage::PaneResized);
 
-    Column::new().push(menu).push(pane_grid).into()
+    let mut content = Column::new()
+        .push(menu)
+        .push(text(title).size(14))
+        .push(pane_grid);
+
+    if let Some(error) = &app_state.error {
+        content = content.push(
+            row![
+                text(error).color(Color::from_rgb(1.0, 0.3, 0.3)),
+                button("✕")
+                    .style(button::danger)
+                    .padding(3)
+                    .on_press(AppMessage::DismissError),
+            ]
+            .spacing(10),
+        );
+    }
+
+    content.into()
 }
 
 impl Appstate {
@@ -233,7 +412,10 @@ impl Appstate {
 
         Appstate {
             panes,
-            project: Project::new("World conquer"),
+            project: Project::new("Untitled"),
+            file_path: None,
+            dirty: false,
+            error: None,
             tasks_state: TasksState::default(),
             personnel_state: PersonnelState::default(),
             materials_state: MaterialsState::default(),

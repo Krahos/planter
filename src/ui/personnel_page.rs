@@ -1,4 +1,3 @@
-use core::panic;
 use iced::{
     Element, Task,
     widget::{Column, Row, button},
@@ -52,6 +51,36 @@ pub enum PersonnelMessage {
     ResourceDeleted(usize),
 }
 
+pub fn reset_project(state: &mut PersonnelState, project: &Project) {
+    state.repr.clear();
+    for (res_id, resource) in project.resources().iter().enumerate() {
+        if let Resource::Personnel { person, hourly_rate } = resource {
+            state.repr.push(Repr {
+                res_id,
+                first_name: person.first_name().to_owned(),
+                last_name: person.last_name().to_owned(),
+                email: person
+                    .email()
+                    .as_ref()
+                    .map(std::string::ToString::to_string)
+                    .unwrap_or_default(),
+                phone_number: person
+                    .phone()
+                    .as_ref()
+                    .map(std::string::ToString::to_string)
+                    .unwrap_or_default(),
+                hourly_rate: hourly_rate
+                    .map(|r| (r as f32 / 100.0).to_string())
+                    .unwrap_or_default(),
+                ..Default::default()
+            });
+        }
+    }
+    state.new_person_name = String::new();
+    state.new_person_surname = String::new();
+    state.is_new_name_err = false;
+}
+
 pub fn update(
     state: &mut PersonnelState,
     project: &mut Project,
@@ -59,75 +88,67 @@ pub fn update(
 ) -> Task<AppMessage> {
     match message {
         PersonnelMessage::UpdateName(i, res_id, n) => {
-            match project.resource_mut(res_id).unwrap() {
-                Resource::Personnel { person, .. } => {
-                    state.repr[i].is_first_name_err = person.update_first_name(&n).is_err();
-                }
-                _ => panic!(),
+            if let Resource::Personnel { person, .. } = project.resource_mut(res_id).unwrap() {
+                state.repr[i].is_first_name_err = person.update_first_name(&n).is_err();
             }
             state.repr[i].first_name = n;
             Task::none()
         }
         PersonnelMessage::UpdateSurname(i, res_id, s) => {
-            match project.resource_mut(res_id).unwrap() {
-                Resource::Personnel { person, .. } => {
-                    state.repr[i].is_last_name_err = person.update_last_name(&s).is_err();
-                }
-                _ => panic!(),
+            if let Resource::Personnel { person, .. } = project.resource_mut(res_id).unwrap() {
+                state.repr[i].is_last_name_err = person.update_last_name(&s).is_err();
             }
 
             state.repr[i].last_name = s;
             Task::none()
         }
         PersonnelMessage::UpdateEmail(i, res_id, e) => {
-            match project.resource_mut(res_id).unwrap() {
-                Resource::Personnel { person, .. } => {
-                    if e.is_empty() {
-                        person.rm_email();
-                        state.repr[i].is_email_err = false;
-                    } else if let Ok(email) = EmailAddress::from_str(&e) {
-                        person.update_email(email);
-                        state.repr[i].is_email_err = false;
-                    } else {
-                        state.repr[i].is_email_err = true;
-                    }
+            if let Resource::Personnel { person, .. } = project.resource_mut(res_id).unwrap() {
+                if e.is_empty() {
+                    person.rm_email();
+                    state.repr[i].is_email_err = false;
+                } else if let Ok(email) = EmailAddress::from_str(&e) {
+                    person.update_email(email);
+                    state.repr[i].is_email_err = false;
+                } else {
+                    state.repr[i].is_email_err = true;
                 }
-                _ => panic!(),
             }
             state.repr[i].email = e;
             Task::none()
         }
         PersonnelMessage::UpdatePhoneNumber(i, res_id, p) => {
-            match project.resource_mut(res_id).unwrap() {
-                Resource::Personnel { person, .. } => {
-                    if p.is_empty() {
-                        person.rm_phone();
-                        state.repr[i].is_phone_err = false;
-                    } else if let Ok(phone) = PhoneNumber::from_str(&p) {
-                        person.update_phone(phone);
-                        state.repr[i].is_phone_err = false;
-                    } else {
-                        state.repr[i].is_phone_err = true;
-                    }
+            if let Resource::Personnel { person, .. } = project.resource_mut(res_id).unwrap() {
+                if p.is_empty() {
+                    person.rm_phone();
+                    state.repr[i].is_phone_err = false;
+                } else if let Ok(phone) = PhoneNumber::from_str(&p) {
+                    person.update_phone(phone);
+                    state.repr[i].is_phone_err = false;
+                } else {
+                    state.repr[i].is_phone_err = true;
                 }
-                _ => panic!(),
             }
             state.repr[i].phone_number = p;
             Task::none()
         }
         PersonnelMessage::UpdateNewName(n) => {
+            state.is_new_name_err = false;
             state.new_person_name = n;
             Task::none()
         }
         PersonnelMessage::UpdateNewSurname(n) => {
+            state.is_new_name_err = false;
             state.new_person_surname = n;
             Task::none()
         }
         PersonnelMessage::CreateNewPersonnel => {
             if state.new_person_name.is_empty() || state.new_person_surname.is_empty() {
+                state.is_new_name_err = true;
                 return Task::none();
             }
             if let Ok(person) = Person::new(&state.new_person_name, &state.new_person_surname) {
+                state.is_new_name_err = false;
                 let personnel = Resource::Personnel {
                     person,
                     hourly_rate: None,
@@ -154,16 +175,20 @@ pub fn update(
         }
         PersonnelMessage::UpdateHourlyRate(i, res_id, r) => {
             if let Ok(amount) = r.parse::<f32>() {
-                match project.resource_mut(res_id).unwrap() {
-                    Resource::Personnel { hourly_rate, .. } => {
-                        *hourly_rate = Some((amount * 100.) as u16);
-                    }
-                    _ => panic!(),
+                if let Resource::Personnel { hourly_rate, .. } =
+                    project.resource_mut(res_id).unwrap()
+                {
+                    let cents = (amount * 100.).round() as u32;
+                    *hourly_rate = Some(u16::try_from(cents).unwrap_or(u16::MAX));
                 }
                 state.repr[i].hourly_rate = r;
                 state.repr[i].is_rate_err = false;
             } else if r.is_empty() {
-                // TODO: Remove rate from project
+                if let Resource::Personnel { hourly_rate, .. } =
+                    project.resource_mut(res_id).unwrap()
+                {
+                    *hourly_rate = None;
+                }
                 state.repr[i].hourly_rate = r;
                 state.repr[i].is_rate_err = false;
             }

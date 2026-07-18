@@ -1,11 +1,1 @@
-// struct Wbs {}
-
-// enum Message {}
-
-// impl Wbs {
-//     fn update(&mut self, message: Message) {
-//         match message {}
-//     }
-
-//     // fn view(&self) -> Element<Message> {}
-// }
+// TODO: WBS (Work Breakdown Structure) view — not yet implemented.

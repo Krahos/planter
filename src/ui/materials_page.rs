@@ -165,6 +165,47 @@ pub enum MaterialsMessage {
     ResourceDeleted(usize),
 }
 
+pub fn reset_project(state: &mut MaterialsState, project: &Project) {
+    state.repr.clear();
+    for (res_id, resource) in project.resources().iter().enumerate() {
+        if let Resource::Material(material) = resource {
+            let name = material.name().to_owned();
+            let quantity = material
+                .quantity()
+                .map(|q| q.to_string())
+                .unwrap_or_default();
+            match material {
+                Material::Consumable(_) => {
+                    state.repr.push(Repr::Consumable(ConsumableRepr {
+                        res_id,
+                        name,
+                        quantity,
+                        cost_per_unit: material
+                            .cost_per_unit()
+                            .map(|c| format!("{:.2}", c as f32 / 100.0))
+                            .unwrap_or_default(),
+                        ..Default::default()
+                    }));
+                }
+                Material::NonConsumable(nc) => {
+                    state.repr.push(Repr::NonConsumable(NonConsumableRepr {
+                        res_id,
+                        name,
+                        quantity,
+                        hourly_rate: nc
+                            .hourly_rate()
+                            .map(|r| format!("{:.2}", r as f32 / 100.0))
+                            .unwrap_or_default(),
+                        ..Default::default()
+                    }));
+                }
+            }
+        }
+    }
+    state.new_material_name = String::new();
+    state.is_new_material_err = false;
+}
+
 pub fn update(
     state: &mut MaterialsState,
     project: &mut Project,
@@ -172,24 +213,21 @@ pub fn update(
 ) -> Task<AppMessage> {
     match message {
         MaterialsMessage::UpdateName(i, res_id, n) => {
-            match project.resource_mut(res_id).unwrap() {
-                Resource::Material(material) => material.update_name(&n),
-                _ => panic!(),
+            if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
+                material.update_name(&n);
             }
             state.repr[i].update_name(n);
             Task::none()
         }
         MaterialsMessage::UpdateQuantity(i, res_id, q) => {
             if let Ok(quantity) = q.parse::<u16>() {
-                match project.resource_mut(res_id).unwrap() {
-                    Resource::Material(material) => material.update_quantity(quantity),
-                    _ => panic!(),
+                if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
+                    material.update_quantity(quantity);
                 }
                 state.repr[i].update_is_quantity_err(false);
             } else if q.is_empty() {
-                match project.resource_mut(res_id).unwrap() {
-                    Resource::Material(material) => material.remove_quantity(),
-                    _ => panic!(),
+                if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
+                    material.remove_quantity();
                 }
                 state.repr[i].update_is_quantity_err(false);
             } else {
@@ -200,17 +238,14 @@ pub fn update(
         }
         MaterialsMessage::UpdateCost(i, res_id, c) => {
             if let Ok(cost) = c.parse::<f32>() {
-                match project.resource_mut(res_id).unwrap() {
-                    Resource::Material(material) => {
-                        material.update_cost_per_unit((cost * 100.) as u16)
-                    }
-                    _ => panic!(),
+                if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
+                    let cents = (cost * 100.).round() as u32;
+                    material.update_cost_per_unit(u16::try_from(cents).unwrap_or(u16::MAX));
                 }
                 state.repr[i].update_is_cost_err(false);
             } else if c.is_empty() {
-                match project.resource_mut(res_id).unwrap() {
-                    Resource::Material(material) => material.remove_cost_per_unit(),
-                    _ => panic!(),
+                if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
+                    material.remove_cost_per_unit();
                 }
                 state.repr[i].update_is_cost_err(false);
             } else {
@@ -235,11 +270,13 @@ pub fn update(
             Task::none()
         }
         MaterialsMessage::UpdateNewName(n) => {
+            state.is_new_material_err = false;
             state.new_material_name = n;
             Task::none()
         }
         MaterialsMessage::CreateNewMaterial => {
             if state.new_material_name.is_empty() {
+                state.is_new_material_err = true;
                 return Task::none();
             }
 
@@ -252,6 +289,7 @@ pub fn update(
                 ..Default::default()
             }));
 
+            state.is_new_material_err = false;
             state.new_material_name = "".to_owned();
             Task::none()
         }

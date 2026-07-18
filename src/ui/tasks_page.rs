@@ -4,12 +4,11 @@ use iced::font::Family;
 use iced::widget::{Column, Row, button, checkbox, container, text};
 use iced::{Element, Font, Length};
 use iced_aw::ContextMenu;
-use once_cell::sync::Lazy;
 use planter_core::Uuid;
 use planter_core::duration::NonNegativeDuration;
 use planter_core::project::{Project, RelDir, TimeRelationship};
 use planter_core::task::Task;
-use regex::bytes::Regex;
+use regex::Regex;
 use std::collections::HashMap;
 
 use crate::ui::constants;
@@ -144,85 +143,104 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
             }
             state.repr[i].duration = d;
         }
-        TasksMessage::UpdateResources(_i, _s) => {}
         TasksMessage::UpdatePredecessors(i, p) => {
             let id = task_id_at(state, i);
-            let old_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
-            let is_failure = if let Some(indices) = parse_indices(&p) {
-                if indices.iter().any(|&idx| idx >= state.repr.len()) {
-                    true
-                } else {
-                    let ids: Vec<Uuid> =
-                        indices.iter().map(|&idx| task_id_at(state, idx)).collect();
-                    project
-                        .update_relationships(
-                            id,
-                            &ids,
-                            RelDir::Predecessors,
-                            TimeRelationship::FinishToStart,
-                        )
-                        .is_err()
-                }
-            } else {
-                true
-            };
 
-            if is_failure {
-                project
+            if p.is_empty() {
+                let old_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
+                if project
                     .update_relationships(
                         id,
                         &[],
                         RelDir::Predecessors,
                         TimeRelationship::FinishToStart,
                     )
-                    .expect("It should have been possible to remove predecessors. This is a bug.");
+                    .is_ok()
+                {
+                    update_predecessors_repr(state, project, &old_pred_ids);
+                    state.repr[i].is_predecessors_err = false;
+                    state.repr[i].predecessors = p;
+                    return;
+                }
+            } else if let Some(indices) = parse_indices(&p)
+                && !indices.iter().any(|&idx| idx >= state.repr.len())
+            {
+                let old_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
+                let ids: Vec<Uuid> =
+                    indices.iter().map(|&idx| task_id_at(state, idx)).collect();
+
+                if project
+                    .update_relationships(
+                        id,
+                        &ids,
+                        RelDir::Predecessors,
+                        TimeRelationship::FinishToStart,
+                    )
+                    .is_ok()
+                {
+                    let new_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
+                    update_predecessors_repr(state, project, &new_pred_ids);
+                    update_predecessors_repr(state, project, &old_pred_ids);
+
+                    state.repr[i].is_predecessors_err = false;
+                    state.repr[i].predecessors = p;
+                    return;
+                }
             }
 
-            let new_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
-            update_predecessors_repr(state, project, &new_pred_ids);
-            update_predecessors_repr(state, project, &old_pred_ids);
-
-            state.repr[i].is_predecessors_err = is_failure;
+            state.repr[i].is_predecessors_err = true;
             state.repr[i].predecessors = p;
         }
         TasksMessage::UpdateSuccessors(i, p) => {
             let id = task_id_at(state, i);
-            let old_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
-            let is_failure = if let Some(indices) = parse_indices(&p) {
-                if indices.iter().any(|&idx| idx >= state.repr.len()) {
-                    true
-                } else {
-                    let ids: Vec<Uuid> =
-                        indices.iter().map(|&idx| task_id_at(state, idx)).collect();
-                    project
-                        .update_relationships(
-                            id,
-                            &ids,
-                            RelDir::Successors,
-                            TimeRelationship::FinishToStart,
-                        )
-                        .is_err()
-                }
-            } else {
-                true
-            };
-            if is_failure {
-                project
+
+            if p.is_empty() {
+                let old_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
+                if project
                     .update_relationships(
                         id,
                         &[],
                         RelDir::Successors,
                         TimeRelationship::FinishToStart,
                     )
-                    .expect("It should have been possible to remove successors. This is a bug.");
+                    .is_ok()
+                {
+                    update_successors_repr(state, project, &old_succ_ids);
+                    state.repr[i].is_successors_err = false;
+                    state.repr[i].successors = p;
+                    return;
+                }
+            } else if let Some(indices) = parse_indices(&p)
+                && !indices.iter().any(|&idx| idx >= state.repr.len())
+            {
+                let old_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
+                let ids: Vec<Uuid> =
+                    indices.iter().map(|&idx| task_id_at(state, idx)).collect();
+
+                if project
+                    .update_relationships(
+                        id,
+                        &ids,
+                        RelDir::Successors,
+                        TimeRelationship::FinishToStart,
+                    )
+                    .is_ok()
+                {
+                    let new_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
+                    update_successors_repr(state, project, &new_succ_ids);
+                    update_successors_repr(state, project, &old_succ_ids);
+
+                    state.repr[i].is_successors_err = false;
+                    state.repr[i].successors = p;
+                    return;
+                }
             }
 
-            let new_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
-            update_successors_repr(state, project, &new_succ_ids);
-            update_successors_repr(state, project, &old_succ_ids);
-
-            state.repr[i].is_successors_err = is_failure;
+            state.repr[i].is_successors_err = true;
             state.repr[i].successors = p;
+        }
+        TasksMessage::UpdateResources(_i, _s) => {
+            // TODO: Wire up resource assignment to tasks.
         }
         TasksMessage::CreateNewTask => {
             let task = Task::new(state.new_task.clone());
@@ -248,14 +266,12 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
                 let id = task_id_at(state, i);
                 let parent_id = task_id_at(state, parent_idx);
                 let _ = project.add_subtask(parent_id, id);
-                remove_relationships_with_ancestors(&mut *project, id);
                 sync_dates_upward(state, project, id);
                 update_repr(state, project);
             }
         }
         TasksMessage::OutdentTask(i) => {
             let id = task_id_at(state, i);
-            remove_relationships_with_ancestors(&mut *project, id);
             if let Some(parent_id) = project.task_parent(id) {
                 let _ = project.remove_subtask(id);
                 // Move the task right after its former parent in the task order
@@ -376,7 +392,7 @@ fn dfs_order(state: &mut TasksState, project: &Project, task_order: &[Uuid]) {
             is_predecessors_err: false,
             successors,
             is_successors_err: false,
-            resources: "".to_owned(),
+            resources: String::new(),
         });
     }
 }
@@ -393,6 +409,10 @@ fn dfs_visit(id: Uuid, project: &Project, task_order: &[Uuid], order: &mut Vec<U
     for child in children {
         dfs_visit(child, project, task_order, order);
     }
+}
+
+pub fn reset_project(state: &mut TasksState, project: &mut Project) {
+    update_repr(state, project);
 }
 
 fn update_repr(state: &mut TasksState, project: &mut Project) {
@@ -478,14 +498,6 @@ fn task_id_at(state: &TasksState, idx: usize) -> Uuid {
     state.repr[idx].id
 }
 
-fn remove_relationships_with_ancestors(project: &mut Project, mut id: Uuid) {
-    while let Some(ancestor) = project.task_parent(id) {
-        let _ = project.rm_time_relationship(ancestor, id);
-        let _ = project.rm_time_relationship(id, ancestor);
-        id = ancestor;
-    }
-}
-
 fn sync_dates_upward(state: &mut TasksState, project: &mut Project, child_id: Uuid) {
     let mut current = child_id;
     while let Some(parent_id) = project.task_parent(current) {
@@ -498,12 +510,11 @@ fn sync_dates_upward(state: &mut TasksState, project: &mut Project, child_id: Uu
 }
 
 fn parse_indices(s: &str) -> Option<Vec<usize>> {
-    let bytes = s.as_bytes();
-    static RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"^[0-9]{1,3}(;[0-9]{1,3})*$")
+    static RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+        Regex::new(r"^[0-9]+(;[0-9]+)*$")
             .expect("It wasn't possible to compile a hardcoded regex. This is a bug.")
     });
-    if RE.is_match(bytes) {
+    if RE.is_match(s) {
         Some(
             s.split(';')
                 .map(|index_s| {
