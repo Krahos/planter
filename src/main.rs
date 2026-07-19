@@ -6,7 +6,9 @@ use iced::{
         pane_grid::{self, Axis::Vertical, DragEvent},
         row, scrollable, text,
     },
-    Border, Padding, alignment,
+    widget::scrollable::{Direction, Scrollbar},
+    Border, alignment,
+    Padding,
 };
 use iced_aw::{
     menu::{Menu, MenuBar},
@@ -362,7 +364,15 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
                 style::title_bar_active
             });
 
-        pane_grid::Content::new(scrollable(widget))
+        pane_grid::Content::new(
+            scrollable(container(widget).padding(Padding::default().bottom(10.0)))
+                .direction(Direction::Both {
+                    vertical: Scrollbar::new(),
+                    horizontal: Scrollbar::new(),
+                })
+                .width(Length::Fill)
+                .height(Length::Fill),
+        )
             .title_bar(title_bar)
             .style(if is_focused {
                 style::pane_focused

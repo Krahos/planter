@@ -15,7 +15,7 @@ chrono = "0.4.45"
 iced = {features = ["advanced", "lazy"], version = "0.14.0"}
 iced_aw = {version = "0.14.1", default-features = false, features = ["context_menu", "menu"]}
 planter-core = {path = "../planter-core", features = ["serde"]}
-regex = "1.12.4"
+regex = "1.13.1"
 ron = "0.12"
 rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
