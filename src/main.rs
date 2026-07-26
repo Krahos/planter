@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
+use iced::widget::button::{Status, Style};
 use iced::{
-    Color, Element, Length, Task,
-    widget::{Column, PaneGrid, button, checkbox, container,
+    Border, Color, Element, Length, Padding, Task, alignment,
+    widget::scrollable::{Direction, Scrollbar},
+    widget::{
+        Column, PaneGrid, button, checkbox, container,
         pane_grid::{self, Axis::Vertical, DragEvent},
         row, scrollable, text,
     },
-    widget::scrollable::{Direction, Scrollbar},
-    Border, alignment,
-    Padding,
 };
 use iced_aw::{
     menu::{Menu, MenuBar},
@@ -146,10 +146,7 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
         AppMessage::FileOpened(None) => Task::none(),
         AppMessage::SaveFile => {
             if let Some(ref path) = state.file_path {
-                match ron::ser::to_string_pretty(
-                    &state.project,
-                    ron::ser::PrettyConfig::new(),
-                ) {
+                match ron::ser::to_string_pretty(&state.project, ron::ser::PrettyConfig::new()) {
                     Ok(data) => {
                         let path = path.clone();
                         Task::perform(
@@ -193,10 +190,7 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
         ),
         AppMessage::FileSaved(Some(path)) => {
             let path = ensure_planter_ext(path);
-            match ron::ser::to_string_pretty(
-                &state.project,
-                ron::ser::PrettyConfig::new(),
-            ) {
+            match ron::ser::to_string_pretty(&state.project, ron::ser::PrettyConfig::new()) {
                 Ok(data) => Task::perform(
                     async move {
                         std::fs::write(&path, &data)
@@ -237,9 +231,8 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
             Task::none()
         }
         AppMessage::TasksMessage(tasks_message) => {
-            tasks_page::update(&mut state.tasks_state, &mut state.project, tasks_message);
             state.dirty = true;
-            Task::none()
+            tasks_page::update(&mut state.tasks_state, &mut state.project, tasks_message)
         }
         AppMessage::PersonnelMessage(personnel_message) => {
             state.dirty = true;
@@ -390,12 +383,12 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
                 .width(Length::Fill)
                 .height(Length::Fill),
         )
-            .title_bar(title_bar)
-            .style(if is_focused {
-                style::pane_focused
-            } else {
-                style::pane_active
-            })
+        .title_bar(title_bar)
+        .style(if is_focused {
+            style::pane_focused
+        } else {
+            style::pane_active
+        })
     })
     .width(Length::Fill)
     .height(Length::Fill)
@@ -404,9 +397,7 @@ fn view(app_state: &Appstate) -> Element<'_, AppMessage> {
     .on_drag(AppMessage::PaneDragged)
     .on_resize(10, AppMessage::PaneResized);
 
-    let mut content = Column::new()
-        .push(menu)
-        .push(pane_grid);
+    let mut content = Column::new().push(menu).push(pane_grid);
 
     if let Some(error) = &app_state.error {
         content = content.push(
@@ -494,22 +485,19 @@ const PANE_ID_COLOR_FOCUSED: Color = Color::from_rgb(
     0x47 as f32 / 255.0,
 );
 
-fn menu_item_button<'a>(
-    label: &'a str,
-    msg: AppMessage,
-) -> button::Button<'a, AppMessage> {
-    button(text(label).width(Length::Fill).align_y(alignment::Vertical::Center))
-        .width(Length::Fill)
-        .padding([4, 8])
-        .style(menu_button_style)
-        .on_press(msg)
+fn menu_item_button<'a>(label: &'a str, msg: AppMessage) -> button::Button<'a, AppMessage> {
+    button(
+        text(label)
+            .width(Length::Fill)
+            .align_y(alignment::Vertical::Center),
+    )
+    .width(Length::Fill)
+    .padding([4, 8])
+    .style(menu_button_style)
+    .on_press(msg)
 }
 
-fn menu_button_style(
-    theme: &iced::Theme,
-    status: iced::widget::button::Status,
-) -> iced::widget::button::Style {
-    use iced::widget::button::Style;
+fn menu_button_style(theme: &iced::Theme, status: Status) -> Style {
     let palette = theme.extended_palette();
     let base = Style {
         text_color: palette.background.base.text,
@@ -517,22 +505,22 @@ fn menu_button_style(
         ..Style::default()
     };
     match status {
-        iced::widget::button::Status::Active => Style {
+        Status::Active => Style {
             background: None,
             ..base
         },
-        iced::widget::button::Status::Hovered => Style {
+        Status::Hovered => Style {
             background: Some(
                 Color::from_rgb(
-                    palette.primary.weak.color.r * 1.2,
-                    palette.primary.weak.color.g * 1.2,
-                    palette.primary.weak.color.b * 1.2,
+                    (palette.primary.weak.color.r * 1.2).min(1.0),
+                    (palette.primary.weak.color.g * 1.2).min(1.0),
+                    (palette.primary.weak.color.b * 1.2).min(1.0),
                 )
                 .into(),
             ),
             ..base
         },
-        iced::widget::button::Status::Pressed => Style {
+        Status::Pressed => Style {
             background: Some(palette.primary.weak.color.into()),
             ..base
         },

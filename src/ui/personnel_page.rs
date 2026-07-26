@@ -54,7 +54,11 @@ pub enum PersonnelMessage {
 pub fn reset_project(state: &mut PersonnelState, project: &Project) {
     state.repr.clear();
     for (res_id, resource) in project.resources().iter().enumerate() {
-        if let Resource::Personnel { person, hourly_rate } = resource {
+        if let Resource::Personnel {
+            person,
+            hourly_rate,
+        } = resource
+        {
             state.repr.push(Repr {
                 res_id,
                 first_name: person.first_name().to_owned(),
