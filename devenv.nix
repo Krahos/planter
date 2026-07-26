@@ -8,6 +8,7 @@
     cargo-edit
     rust-analyzer
     cargo-deny
+    cargo-machete
 
     pkg-config
     dbus

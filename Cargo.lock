@@ -2610,7 +2610,6 @@ dependencies = [
  "regex",
  "rfd",
  "ron",
- "serde",
 ]
 
 [[package]]

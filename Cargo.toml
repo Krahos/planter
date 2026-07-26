@@ -18,7 +18,6 @@ planter-core = {version = "0.0.6", features = ["serde"]}
 regex = "1.13.1"
 ron = "0.12"
 rfd = "0.17"
-serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 proptest = "1.11.0"
