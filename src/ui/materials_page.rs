@@ -215,6 +215,8 @@ pub fn update(
         MaterialsMessage::UpdateName(i, res_id, n) => {
             if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
                 material.update_name(&n);
+            } else {
+                eprintln!("Expected Material resource at index {res_id}");
             }
             state.repr[i].update_name(n);
             Task::none()
@@ -223,11 +225,15 @@ pub fn update(
             if let Ok(quantity) = q.parse::<u16>() {
                 if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
                     material.update_quantity(quantity);
+                } else {
+                    eprintln!("Expected Material resource at index {res_id}");
                 }
                 state.repr[i].update_is_quantity_err(false);
             } else if q.is_empty() {
                 if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
                     material.remove_quantity();
+                } else {
+                    eprintln!("Expected Material resource at index {res_id}");
                 }
                 state.repr[i].update_is_quantity_err(false);
             } else {
@@ -241,11 +247,15 @@ pub fn update(
                 if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
                     let cents = (cost * 100.).round() as u32;
                     material.update_cost_per_unit(u16::try_from(cents).unwrap_or(u16::MAX));
+                } else {
+                    eprintln!("Expected Material resource at index {res_id}");
                 }
                 state.repr[i].update_is_cost_err(false);
             } else if c.is_empty() {
                 if let Resource::Material(material) = project.resource_mut(res_id).unwrap() {
                     material.remove_cost_per_unit();
+                } else {
+                    eprintln!("Expected Material resource at index {res_id}");
                 }
                 state.repr[i].update_is_cost_err(false);
             } else {

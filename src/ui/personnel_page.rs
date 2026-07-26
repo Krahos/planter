@@ -90,6 +90,8 @@ pub fn update(
         PersonnelMessage::UpdateName(i, res_id, n) => {
             if let Resource::Personnel { person, .. } = project.resource_mut(res_id).unwrap() {
                 state.repr[i].is_first_name_err = person.update_first_name(&n).is_err();
+            } else {
+                eprintln!("Expected Personnel resource at index {res_id}");
             }
             state.repr[i].first_name = n;
             Task::none()
@@ -97,6 +99,8 @@ pub fn update(
         PersonnelMessage::UpdateSurname(i, res_id, s) => {
             if let Resource::Personnel { person, .. } = project.resource_mut(res_id).unwrap() {
                 state.repr[i].is_last_name_err = person.update_last_name(&s).is_err();
+            } else {
+                eprintln!("Expected Personnel resource at index {res_id}");
             }
 
             state.repr[i].last_name = s;
@@ -113,6 +117,8 @@ pub fn update(
                 } else {
                     state.repr[i].is_email_err = true;
                 }
+            } else {
+                eprintln!("Expected Personnel resource at index {res_id}");
             }
             state.repr[i].email = e;
             Task::none()
@@ -128,6 +134,8 @@ pub fn update(
                 } else {
                     state.repr[i].is_phone_err = true;
                 }
+            } else {
+                eprintln!("Expected Personnel resource at index {res_id}");
             }
             state.repr[i].phone_number = p;
             Task::none()
@@ -180,6 +188,8 @@ pub fn update(
                 {
                     let cents = (amount * 100.).round() as u32;
                     *hourly_rate = Some(u16::try_from(cents).unwrap_or(u16::MAX));
+                } else {
+                    eprintln!("Expected Personnel resource at index {res_id}");
                 }
                 state.repr[i].hourly_rate = r;
                 state.repr[i].is_rate_err = false;
@@ -188,6 +198,8 @@ pub fn update(
                     project.resource_mut(res_id).unwrap()
                 {
                     *hourly_rate = None;
+                } else {
+                    eprintln!("Expected Personnel resource at index {res_id}");
                 }
                 state.repr[i].hourly_rate = r;
                 state.repr[i].is_rate_err = false;

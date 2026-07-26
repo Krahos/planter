@@ -2615,7 +2615,9 @@ dependencies = [
 
 [[package]]
 name = "planter-core"
-version = "0.0.4"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d2aef650d8ed8fba1920825654274f8cd230b8208cc290319744fe5b9cb0e23"
 dependencies = [
  "anyhow",
  "bon",

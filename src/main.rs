@@ -78,6 +78,7 @@ enum AppMessage {
     SaveFile,
     SaveAsFile,
     FileSaved(Option<PathBuf>),
+    FileWriteResult(Result<PathBuf, String>),
     DismissError,
 }
 
@@ -149,16 +150,22 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
                     &state.project,
                     ron::ser::PrettyConfig::new(),
                 ) {
-                    Ok(data) => match std::fs::write(path, data) {
-                        Ok(_) => {
-                            state.dirty = false;
-                            state.error = None;
-                        }
-                        Err(e) => state.error = Some(format!("Failed to save: {e}")),
-                    },
-                    Err(e) => state.error = Some(format!("Failed to serialize: {e}")),
+                    Ok(data) => {
+                        let path = path.clone();
+                        Task::perform(
+                            async move {
+                                std::fs::write(&path, &data)
+                                    .map(|_| path)
+                                    .map_err(|e| format!("Failed to save: {e}"))
+                            },
+                            AppMessage::FileWriteResult,
+                        )
+                    }
+                    Err(e) => {
+                        state.error = Some(format!("Failed to serialize: {e}"));
+                        Task::none()
+                    }
                 }
-                Task::none()
             } else {
                 Task::perform(
                     async {
@@ -190,19 +197,31 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
                 &state.project,
                 ron::ser::PrettyConfig::new(),
             ) {
-                Ok(data) => match std::fs::write(&path, data) {
-                    Ok(_) => {
-                        state.file_path = Some(path);
-                        state.dirty = false;
-                        state.error = None;
-                    }
-                    Err(e) => state.error = Some(format!("Failed to save: {e}")),
-                },
-                Err(e) => state.error = Some(format!("Failed to serialize: {e}")),
+                Ok(data) => Task::perform(
+                    async move {
+                        std::fs::write(&path, &data)
+                            .map(|_| path)
+                            .map_err(|e| format!("Failed to save: {e}"))
+                    },
+                    AppMessage::FileWriteResult,
+                ),
+                Err(e) => {
+                    state.error = Some(format!("Failed to serialize: {e}"));
+                    Task::none()
+                }
             }
-            Task::none()
         }
         AppMessage::FileSaved(None) => Task::none(),
+        AppMessage::FileWriteResult(Ok(path)) => {
+            state.file_path = Some(path);
+            state.dirty = false;
+            state.error = None;
+            Task::none()
+        }
+        AppMessage::FileWriteResult(Err(e)) => {
+            state.error = Some(e);
+            Task::none()
+        }
         AppMessage::DismissError => {
             state.error = None;
             Task::none()
@@ -273,9 +292,7 @@ fn update(state: &mut Appstate, message: AppMessage) -> Task<AppMessage> {
                 .map(|(id, _)| *id);
 
             if let Some(id) = pane {
-                if state.panes.len() > 1 {
-                    state.panes.close(id);
-                }
+                state.panes.close(id);
             } else {
                 let split_target = state.panes.iter().next().map(|(id, _)| *id);
                 if let Some(id) = split_target {
@@ -546,12 +563,12 @@ fn view_controls<'a>(
         None
     };
 
-    let close = (total_panes > 1).then(|| {
+    let close = Some(
         button(text("✕").size(14))
             .style(button::danger)
             .padding(3)
-            .on_press(AppMessage::TogglePaneVisibility(pane_type))
-    });
+            .on_press(AppMessage::TogglePaneVisibility(pane_type)),
+    );
 
     row![maximize, close].spacing(5).into()
 }
