@@ -4,15 +4,14 @@ use iced::font::Family;
 use iced::widget::{Column, Row, button, checkbox, container, text};
 use iced::{Element, Font, Length};
 use iced_aw::ContextMenu;
-use once_cell::sync::Lazy;
 use planter_core::Uuid;
 use planter_core::duration::NonNegativeDuration;
 use planter_core::project::{Project, RelDir, TimeRelationship};
 use planter_core::task::Task;
-use regex::bytes::Regex;
+use regex::Regex;
 use std::collections::HashMap;
 
-use crate::ui::constants;
+use crate::{AppMessage, ui::constants};
 
 use super::components::data_cell::data_cell;
 use super::components::data_label::data_label;
@@ -78,22 +77,29 @@ impl Default for TasksState {
 
 const DATE_FORMAT: &str = "%Y-%m-%d %H:%M";
 
-pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessage) {
+pub fn update(
+    state: &mut TasksState,
+    project: &mut Project,
+    message: TasksMessage,
+) -> iced::Task<AppMessage> {
     match message {
         TasksMessage::UpdateName(i, n) => {
             state.repr[i].name = n.clone();
             let id = task_id_at(state, i);
             project.task_mut(id).unwrap().edit_name(n);
+            iced::Task::none()
         }
         TasksMessage::UpdateDescription(i, d) => {
             state.repr[i].description = d.clone();
             let id = task_id_at(state, i);
             project.task_mut(id).unwrap().edit_description(d);
+            iced::Task::none()
         }
         TasksMessage::ToggleCompleted(i) => {
             state.repr[i].completed = !state.repr[i].completed;
             let id = task_id_at(state, i);
             project.task_mut(id).unwrap().toggle_completed();
+            iced::Task::none()
         }
         TasksMessage::UpdateStart(i, s) => {
             if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT) {
@@ -113,6 +119,7 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
                 state.repr[i].is_start_err = true;
             }
             state.repr[i].start = s;
+            iced::Task::none()
         }
         TasksMessage::UpdateFinish(i, s) => {
             if let Ok(date) = NaiveDateTime::parse_from_str(&s, DATE_FORMAT) {
@@ -132,6 +139,7 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
                 state.repr[i].is_finish_err = true;
             }
             state.repr[i].finish = s;
+            iced::Task::none()
         }
         TasksMessage::UpdateDuration(i, d) => {
             if let Ok(duration) = NonNegativeDuration::parse_from_str(&d) {
@@ -143,104 +151,130 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
                 state.repr[i].is_duration_err = true;
             }
             state.repr[i].duration = d;
+            iced::Task::none()
         }
-        TasksMessage::UpdateResources(_i, _s) => {}
         TasksMessage::UpdatePredecessors(i, p) => {
             let id = task_id_at(state, i);
-            let old_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
-            let is_failure = if let Some(indices) = parse_indices(&p) {
-                if indices.iter().any(|&idx| idx >= state.repr.len()) {
-                    true
-                } else {
-                    let ids: Vec<Uuid> =
-                        indices.iter().map(|&idx| task_id_at(state, idx)).collect();
-                    project
-                        .update_relationships(
-                            id,
-                            &ids,
-                            RelDir::Predecessors,
-                            TimeRelationship::FinishToStart,
-                        )
-                        .is_err()
-                }
-            } else {
-                true
-            };
 
-            if is_failure {
-                project
+            if p.is_empty() {
+                let old_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
+                if project
                     .update_relationships(
                         id,
                         &[],
                         RelDir::Predecessors,
                         TimeRelationship::FinishToStart,
                     )
-                    .expect("It should have been possible to remove predecessors. This is a bug.");
+                    .is_ok()
+                {
+                    update_predecessors_repr(state, project, &old_pred_ids);
+                    state.repr[i].is_predecessors_err = false;
+                    state.repr[i].predecessors = p;
+                    return iced::Task::none();
+                }
+            } else if let Some(indices) = parse_indices(&p)
+                && !indices.iter().any(|&idx| idx >= state.repr.len())
+            {
+                let old_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
+                let ids: Vec<Uuid> = indices.iter().map(|&idx| task_id_at(state, idx)).collect();
+
+                if project
+                    .update_relationships(
+                        id,
+                        &ids,
+                        RelDir::Predecessors,
+                        TimeRelationship::FinishToStart,
+                    )
+                    .is_ok()
+                {
+                    let new_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
+                    update_predecessors_repr(state, project, &new_pred_ids);
+                    update_predecessors_repr(state, project, &old_pred_ids);
+
+                    state.repr[i].is_predecessors_err = false;
+                    state.repr[i].predecessors = p;
+                    return iced::Task::none();
+                }
             }
 
-            let new_pred_ids: Vec<Uuid> = project.predecessors_ids(id).collect();
-            update_predecessors_repr(state, project, &new_pred_ids);
-            update_predecessors_repr(state, project, &old_pred_ids);
-
-            state.repr[i].is_predecessors_err = is_failure;
+            state.repr[i].is_predecessors_err = true;
             state.repr[i].predecessors = p;
+            iced::Task::none()
         }
         TasksMessage::UpdateSuccessors(i, p) => {
             let id = task_id_at(state, i);
-            let old_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
-            let is_failure = if let Some(indices) = parse_indices(&p) {
-                if indices.iter().any(|&idx| idx >= state.repr.len()) {
-                    true
-                } else {
-                    let ids: Vec<Uuid> =
-                        indices.iter().map(|&idx| task_id_at(state, idx)).collect();
-                    project
-                        .update_relationships(
-                            id,
-                            &ids,
-                            RelDir::Successors,
-                            TimeRelationship::FinishToStart,
-                        )
-                        .is_err()
-                }
-            } else {
-                true
-            };
-            if is_failure {
-                project
+
+            if p.is_empty() {
+                let old_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
+                if project
                     .update_relationships(
                         id,
                         &[],
                         RelDir::Successors,
                         TimeRelationship::FinishToStart,
                     )
-                    .expect("It should have been possible to remove successors. This is a bug.");
+                    .is_ok()
+                {
+                    update_successors_repr(state, project, &old_succ_ids);
+                    state.repr[i].is_successors_err = false;
+                    state.repr[i].successors = p;
+                    return iced::Task::none();
+                }
+            } else if let Some(indices) = parse_indices(&p)
+                && !indices.iter().any(|&idx| idx >= state.repr.len())
+            {
+                let old_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
+                let ids: Vec<Uuid> = indices.iter().map(|&idx| task_id_at(state, idx)).collect();
+
+                if project
+                    .update_relationships(
+                        id,
+                        &ids,
+                        RelDir::Successors,
+                        TimeRelationship::FinishToStart,
+                    )
+                    .is_ok()
+                {
+                    let new_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
+                    update_successors_repr(state, project, &new_succ_ids);
+                    update_successors_repr(state, project, &old_succ_ids);
+
+                    state.repr[i].is_successors_err = false;
+                    state.repr[i].successors = p;
+                    return iced::Task::none();
+                }
             }
 
-            let new_succ_ids: Vec<Uuid> = project.successors_ids(id).collect();
-            update_successors_repr(state, project, &new_succ_ids);
-            update_successors_repr(state, project, &old_succ_ids);
-
-            state.repr[i].is_successors_err = is_failure;
+            state.repr[i].is_successors_err = true;
             state.repr[i].successors = p;
+            iced::Task::none()
+        }
+        TasksMessage::UpdateResources(_i, _s) => {
+            // TODO: Wire up resource assignment to tasks.
+            iced::Task::none()
         }
         TasksMessage::CreateNewTask => {
             let task = Task::new(state.new_task.clone());
             project.add_task(task);
             state.new_task = "".to_owned();
             update_repr(state, project);
+            iced::Task::none()
         }
-        TasksMessage::UpdateNewTask(n) => state.new_task = n,
+        TasksMessage::UpdateNewTask(n) => {
+            state.new_task = n;
+            iced::Task::none()
+        }
         TasksMessage::DeleteTask(i) => {
             let id = task_id_at(state, i);
             project
                 .rm_task(id)
                 .expect("Should have been possible to remove a task. This is a bug.");
             update_repr(state, project);
+            iced::Task::none()
         }
         TasksMessage::IndentTask(i) => {
             if i == 0 {
-                return;
+                return iced::Task::none();
             }
             let current_depth = state.repr[i].depth;
             let parent_idx = (0..i).rev().find(|&j| state.repr[j].depth <= current_depth);
@@ -248,42 +282,41 @@ pub fn update(state: &mut TasksState, project: &mut Project, message: TasksMessa
                 let id = task_id_at(state, i);
                 let parent_id = task_id_at(state, parent_idx);
                 let _ = project.add_subtask(parent_id, id);
-                remove_relationships_with_ancestors(&mut *project, id);
                 sync_dates_upward(state, project, id);
                 update_repr(state, project);
             }
+            iced::Task::none()
         }
         TasksMessage::OutdentTask(i) => {
             let id = task_id_at(state, i);
-            remove_relationships_with_ancestors(&mut *project, id);
             if let Some(parent_id) = project.task_parent(id) {
                 let _ = project.remove_subtask(id);
-                // Move the task right after its former parent in the task order
-                // so it appears immediately after the parent's subtree.
                 project.move_task_after(id, parent_id);
-                // Promote one level: if the parent has a parent, become its child instead.
                 if let Some(grandparent_id) = project.task_parent(parent_id) {
                     let _ = project.add_subtask(grandparent_id, id);
                 }
             }
             update_repr(state, project);
+            iced::Task::none()
         }
         TasksMessage::InsertAbove(i) => {
             let sibling_id = task_id_at(state, i);
             project.add_sibling_before(Task::new(""), sibling_id);
             update_repr(state, project);
+            iced::Task::none()
         }
         TasksMessage::InsertBelow(i) => {
             let sibling_id = task_id_at(state, i);
             project.add_sibling_after(Task::new(""), sibling_id);
             update_repr(state, project);
+            iced::Task::none()
         }
         TasksMessage::AddChildTask(i) => {
             let parent_id = task_id_at(state, i);
             let child_id = project.add_task(Task::new(""));
-            // `add_subtask` handles cycle detection — brand-new task can't cycle.
             let _ = project.add_subtask(parent_id, child_id);
             update_repr(state, project);
+            iced::Task::none()
         }
     }
 }
@@ -376,7 +409,7 @@ fn dfs_order(state: &mut TasksState, project: &Project, task_order: &[Uuid]) {
             is_predecessors_err: false,
             successors,
             is_successors_err: false,
-            resources: "".to_owned(),
+            resources: String::new(),
         });
     }
 }
@@ -393,6 +426,10 @@ fn dfs_visit(id: Uuid, project: &Project, task_order: &[Uuid], order: &mut Vec<U
     for child in children {
         dfs_visit(child, project, task_order, order);
     }
+}
+
+pub fn reset_project(state: &mut TasksState, project: &mut Project) {
+    update_repr(state, project);
 }
 
 fn update_repr(state: &mut TasksState, project: &mut Project) {
@@ -478,14 +515,6 @@ fn task_id_at(state: &TasksState, idx: usize) -> Uuid {
     state.repr[idx].id
 }
 
-fn remove_relationships_with_ancestors(project: &mut Project, mut id: Uuid) {
-    while let Some(ancestor) = project.task_parent(id) {
-        let _ = project.rm_time_relationship(ancestor, id);
-        let _ = project.rm_time_relationship(id, ancestor);
-        id = ancestor;
-    }
-}
-
 fn sync_dates_upward(state: &mut TasksState, project: &mut Project, child_id: Uuid) {
     let mut current = child_id;
     while let Some(parent_id) = project.task_parent(current) {
@@ -498,12 +527,11 @@ fn sync_dates_upward(state: &mut TasksState, project: &mut Project, child_id: Uu
 }
 
 fn parse_indices(s: &str) -> Option<Vec<usize>> {
-    let bytes = s.as_bytes();
-    static RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"^[0-9]{1,3}(;[0-9]{1,3})*$")
+    static RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+        Regex::new(r"^[0-9]+(;[0-9]+)*$")
             .expect("It wasn't possible to compile a hardcoded regex. This is a bug.")
     });
-    if RE.is_match(bytes) {
+    if RE.is_match(s) {
         Some(
             s.split(';')
                 .map(|index_s| {
