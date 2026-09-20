@@ -14,7 +14,7 @@ edition = "2024"
 chrono = "0.4.45"
 iced = {features = ["advanced", "lazy"], version = "0.14.0"}
 iced_aw = {version = "0.14.1", default-features = false, features = ["context_menu", "menu"]}
-planter-core = {version = "0.0.6", features = ["serde"]}
+planter-core = {version = "0.0.7", features = ["serde"]}
 regex = "1.13.1"
 ron = "0.12"
 rfd = "0.17"
